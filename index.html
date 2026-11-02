@@ -1,5 +1,9 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Structure Synth Web</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&family=Fragment+Mono&display=swap">
 <style>
@@ -20,7 +24,7 @@
   --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f; color-scheme: dark;
 }
 html, body { height: 100%; }
-body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 .app {
@@ -112,6 +116,8 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
   .code { flex: none; height: 46vh; min-height: 260px; }
 }
 </style>
+</head>
+<body>
 
 <div class="app">
   <header>
@@ -635,9 +641,26 @@ function startRender() {
 $('render').addEventListener('click', startRender);
 
 // ---------- Saving ----------
+// Outside a viewer's frame, such as on GitHub Pages, browser downloads work.
+const STANDALONE = (() => {
+  try { return window.self === window.top; } catch (e) { return false; }
+})();
+function browserDownload(filename, data) {
+  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: 'text/plain' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  status('Saved ' + filename);
+}
+
 // The viewer's save service can arrive after this script runs, or not at all.
 let downloadsReady = null;
 function getDownloads() {
+  if (STANDALONE) return Promise.resolve(null);
   if (!downloadsReady) {
     downloadsReady = (async () => {
       for (let i = 0; i < 25 && !(window.claude && window.claude.use); i++) await new Promise(r => setTimeout(r, 200));
@@ -651,6 +674,7 @@ getDownloads();
 // Returns true when the file was handled, or the viewer chose not to save it.
 let saveFailure = '';
 async function trySave(filename, data) {
+  if (STANDALONE) { browserDownload(filename, data); return true; }
   const downloads = await getDownloads();
   if (!downloads) { saveFailure = 'not available in this view'; return false; }
   try {
@@ -724,7 +748,7 @@ $('saveTxt').addEventListener('click', () => {
   let settled = false;
   // If no save result arrives, the copy panel still gives a visible way out.
   const timer = setTimeout(() => { if (!settled) showSaveText('no response from the viewer', src.value, 'script'); }, 8000);
-  trySave('structure-synth-script.txt', new Blob([src.value], { type: 'text/plain' })).then(ok => {
+  trySave(STANDALONE ? 'structure-synth-script.es' : 'structure-synth-script.txt', new Blob([src.value], { type: 'text/plain' })).then(ok => {
     settled = true;
     clearTimeout(timer);
     if (ok) $('saveBox').hidden = true;
@@ -777,3 +801,5 @@ if (draft !== null && draft.trim() && !isExample) {
   loadScript(EISEN_EXAMPLES[i].src, true);
 }
 </script>
+</body>
+</html>

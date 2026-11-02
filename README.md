@@ -4,7 +4,9 @@ A browser remake of [Structure Synth](https://structuresynth.sourceforge.net/). 
 
 This is an independent project, not affiliated with the original. Structure Synth was created by Mikael Hvidtfeldt Christensen.
 
-## Run it
+**Try it:** https://bazz123.github.io/structure-synth-web/
+
+## Run it locally
 
 Browsers don't start Web Workers from `file://` pages, so serve the folder locally:
 
@@ -22,7 +24,7 @@ Then open http://localhost:8765.
 - Includes a seed control for repeatable variations
 - Exports PNG, OBJ with MTL, and the script
 
-Saving files uses the Claude Artifact viewer's save service. Anywhere else, the Save buttons open a panel where you can right-click the image or copy the text.
+Save buttons download files directly when the page runs on its own. Inside the Claude Artifact viewer they use its save service, or open a panel where you can right-click the image or copy the text.
 
 ## Files
 
