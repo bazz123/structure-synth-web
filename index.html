@@ -1,0 +1,779 @@
+<title>Structure Synth Web</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&family=Fragment+Mono&display=swap">
+<style>
+/* Layout: a drafting bench. Script on the left, model filling the rest, with
+   the build readout running along the model's lower edge. */
+:root {
+  --bg: #e6ebee; --panel: #f5f7f8; --panel-2: #dde3e7; --fg: #17222b; --muted: #55646f;
+  --line: #bfc9d0; --accent: #1d4fd6; --accent-fg: #ffffff; --bad: #b3261e; --bad-bg: #fbe9e7; --warn: #8a5a00; --warn-bg: #fbf1d9;
+  --ui: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --code: "Fragment Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11161b; --panel: #192027; --panel-2: #232c34; --fg: #e4eaee; --muted: #9aa8b2;
+  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #11161b; --panel: #192027; --panel-2: #232c34; --fg: #e4eaee; --muted: #9aa8b2;
+  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.app {
+  height: 100%; display: grid; gap: 10px;
+  grid-template-columns: minmax(320px, 36%) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+h1 span { color: var(--accent); }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.group { display: flex; align-items: center; gap: 6px; }
+label.lab { font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+button, select, input[type=number] {
+  font: 600 13px/1 var(--ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 5px; height: 32px; padding: 0 10px;
+}
+input[type=number] { width: 84px; font: 13px/1 var(--code); font-variant-numeric: tabular-nums; }
+button { cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { background: var(--panel-2); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.editor { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 8px; }
+.code { flex: 1; min-height: 0; display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+#gutter {
+  flex: none; width: 42px; padding: 10px 8px 10px 0; margin: 0; text-align: right; overflow: hidden; user-select: none;
+  font: 13px/20px var(--code); color: var(--muted); background: var(--panel-2); white-space: pre;
+}
+#gutter b { font-weight: 400; display: block; }
+#gutter b.err { background: var(--bad); color: var(--panel); margin-right: -8px; padding-right: 8px; }
+#src {
+  flex: 1; min-width: 0; border: 0; outline: 0; resize: none; padding: 10px 12px; background: transparent; color: var(--fg);
+  font: 13px/20px var(--code); white-space: pre; overflow: auto; tab-size: 2;
+}
+.msg { border-radius: 5px; padding: 7px 10px; font-size: 13px; overflow-wrap: anywhere; }
+.msg.err { background: var(--bad-bg); color: var(--bad); }
+.msg.warn { background: var(--warn-bg); color: var(--warn); }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; flex: none; }
+summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px; }
+.ref { padding: 0 10px 10px; max-height: 34vh; overflow: auto; font-size: 13px; }
+.ref table { border-collapse: collapse; width: 100%; }
+.ref td { padding: 3px 10px 3px 0; vertical-align: top; border-top: 1px solid var(--line); }
+.ref td:first-child { font-family: var(--code); font-size: 12px; white-space: nowrap; }
+.credit { font-size: 12px; color: var(--muted); padding: 7px 0 0; }
+.credit a { color: var(--accent); }
+
+.stage { position: relative; min-height: 0; min-width: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; background: var(--panel-2); }
+.view { position: relative; flex: 1; min-height: 0; }
+.view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl { touch-action: none; cursor: grab; }
+#gl:active { cursor: grabbing; }
+#shot { pointer-events: none; }
+#nogl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+.hint {
+  position: absolute; left: 10px; top: 10px; font-size: 12px; padding: 3px 8px; border-radius: 4px;
+  background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+}
+.readout {
+  flex: none; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 7px 12px; background: var(--panel); border-top: 1px solid var(--line);
+  font: 12px/1.4 var(--code); font-variant-numeric: tabular-nums; color: var(--muted);
+}
+.readout b { color: var(--fg); font-weight: 400; }
+#status { margin-left: auto; color: var(--fg); }
+.progress { height: 3px; background: var(--accent); width: 0; flex: none; }
+#saveBox {
+  position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  background: var(--panel);
+}
+#saveBox .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+#saveBox img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
+#saveBox textarea {
+  flex: 1; min-height: 0; width: 100%; resize: none; padding: 10px; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 5px; font: 13px/20px var(--code); white-space: pre; overflow: auto;
+}
+#saveBox .actions { display: flex; gap: 8px; }
+
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
+  .tools { margin-left: 0; }
+  .stage { order: 1; height: 56vh; min-height: 320px; }
+  .editor { order: 2; }
+  .code { flex: none; height: 46vh; min-height: 260px; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Structure Synth <span>Web</span></h1>
+    <div class="tools">
+      <div class="group">
+        <label class="lab" for="example">Example</label>
+        <select id="example"></select>
+        <button id="open" type="button">Open file</button>
+        <input id="file" type="file" accept=".es,.txt,text/plain" hidden>
+      </div>
+      <div class="group">
+        <label class="lab" for="seed">Seed</label>
+        <input id="seed" type="number" value="1" step="1">
+        <button id="reseed" type="button" title="Build again with a random seed">New seed</button>
+      </div>
+      <div class="group">
+        <label class="lab" for="quality">Quality</label>
+        <select id="quality">
+          <option value="draft">Draft</option>
+          <option value="standard" selected>Standard</option>
+          <option value="high">High</option>
+        </select>
+        <button id="render" class="primary" type="button">Raytrace</button>
+      </div>
+      <div class="group">
+        <button id="fit" type="button">Fit view</button>
+        <button id="savePng" type="button">Save PNG</button>
+        <button id="saveObj" type="button" title="Saves a ZIP holding model.obj and model.mtl">Save OBJ</button>
+        <button id="saveTxt" type="button">Save script</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="editor" aria-label="Script">
+    <div class="code">
+      <div id="gutter" aria-hidden="true"></div>
+      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="EisenScript"></textarea>
+    </div>
+    <div id="errors" class="msg err" role="alert" hidden></div>
+    <div id="warnings" class="msg warn" hidden></div>
+    <details>
+      <summary>EisenScript reference</summary>
+      <div class="ref">
+        <table>
+          <tr><td>rule name { ... }</td><td>Defines a rule. Rules with the same name compete at random.</td></tr>
+          <tr><td>rule name w 2</td><td>Weight: how likely this version is to be picked.</td></tr>
+          <tr><td>rule name md 8 &gt; end</td><td>Stops after 8 levels, then runs the rule <code>end</code>.</td></tr>
+          <tr><td>{ x 1 ry 30 } name</td><td>Applies a transform, then calls a rule or shape.</td></tr>
+          <tr><td>5 * { z 1 } name</td><td>Repeats, adding the transform each time.</td></tr>
+          <tr><td>x y z</td><td>Move along an axis.</td></tr>
+          <tr><td>rx ry rz</td><td>Rotate in degrees around the box center.</td></tr>
+          <tr><td>s 2 or s 1 2 3</td><td>Scale around the box center.</td></tr>
+          <tr><td>fx fy fz, m</td><td>Mirror, or apply a 3&times;3 matrix.</td></tr>
+          <tr><td>hue sat b a</td><td>Add to hue. Multiply saturation, brightness and alpha.</td></tr>
+          <tr><td>color #0af</td><td>Set a color. <code>color random</code> picks from the color pool.</td></tr>
+          <tr><td>blend red 0.3</td><td>Mix toward a color.</td></tr>
+          <tr><td>box sphere grid line dot</td><td>Shapes. Add a class with <code>box::shiny</code>.</td></tr>
+          <tr><td>triangle[a;b;c]</td><td>A triangle from three x,y,z points.</td></tr>
+          <tr><td>#define k 3</td><td>Replaces the word k with 3.</td></tr>
+          <tr><td>set maxdepth 100</td><td>Also: maxobjects, minsize, maxsize, seed, background, colorpool, recursion, syncrandom.</td></tr>
+          <tr><td>set colorpool list:a,b</td><td>Also: randomhue, randomrgb, greyscale.</td></tr>
+          <tr><td>set raytracer::samples 16</td><td>Also: shadows, phong, dof, ambient-occlusion-samples, shiny::reflection.</td></tr>
+          <tr><td>Cmd/Ctrl + Enter</td><td>Build now. Scripts also build as you type.</td></tr>
+        </table>
+        <p class="credit">An independent browser remake, not affiliated with the original project. Structure Synth was created by Mikael Hvidtfeldt Christensen: <a href="https://structuresynth.sourceforge.net/" target="_blank" rel="noopener">structuresynth.sourceforge.net</a>. The scripts in the Structure Synth 1.5.0 group come from that project's download, which is licensed under LGPL 2.1 or GPL 3.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="stage" aria-label="3D model">
+    <div class="view" id="view">
+      <canvas id="gl"></canvas>
+      <canvas id="shot" hidden></canvas>
+      <div id="nogl" hidden>This browser can't start WebGL, so the live 3D view is off. Raytrace still works.</div>
+      <div class="hint" id="hint">Drag to orbit. Scroll or pinch to zoom.</div>
+      <div id="saveBox" hidden>
+        <div class="row">
+          <span id="saveNote"></span>
+          <div class="actions">
+            <button id="saveCopy" class="primary" type="button" hidden>Copy script</button>
+            <button id="saveClose" type="button">Close</button>
+          </div>
+        </div>
+        <img id="saveImg" alt="Your model as a PNG image" hidden>
+        <textarea id="saveText" readonly spellcheck="false" wrap="off" aria-label="Script to copy" hidden></textarea>
+      </div>
+    </div>
+    <div class="progress" id="bar"></div>
+    <div class="readout" aria-live="polite">
+      <span>objects <b id="rObjects">0</b></span>
+      <span>generations <b id="rGens">0</b></span>
+      <span>built in <b id="rMs">0</b> ms</span>
+      <span id="status"></span>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="examples.js"></script>
+<script src="examples-original.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
+};
+
+// ---------- Editor ----------
+const src = $('src'), gutter = $('gutter');
+let errorLine = null;
+function drawGutter() {
+  const n = src.value.split('\n').length;
+  let html = '';
+  for (let i = 1; i <= n; i++) html += i === errorLine ? '<b class="err">' + i + '</b>' : '<b>' + i + '</b>';
+  gutter.innerHTML = html;
+  gutter.scrollTop = src.scrollTop;
+}
+src.addEventListener('scroll', () => { gutter.scrollTop = src.scrollTop; });
+src.addEventListener('keydown', e => {
+  if (e.key === 'Tab' && !e.shiftKey) {
+    e.preventDefault();
+    src.setRangeText('  ', src.selectionStart, src.selectionEnd, 'end');
+    onEdit();
+  } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    clearTimeout(editTimer);
+    build();
+  }
+});
+let editTimer = 0;
+function onEdit() {
+  drawGutter();
+  store.set('eisen-draft', src.value);
+  clearTimeout(editTimer);
+  editTimer = setTimeout(build, 350);
+}
+src.addEventListener('input', onEdit);
+
+const exSel = $('example');
+const exGroups = new Map();
+EISEN_EXAMPLES.forEach((ex, i) => {
+  const label = ex.group || 'Starter examples';
+  if (!exGroups.has(label)) {
+    const g = document.createElement('optgroup');
+    g.label = label;
+    exSel.appendChild(g);
+    exGroups.set(label, g);
+  }
+  const o = document.createElement('option');
+  o.value = i;
+  o.textContent = ex.name;
+  exGroups.get(label).appendChild(o);
+});
+const custom = document.createElement('option');
+custom.value = 'custom'; custom.textContent = 'My script'; custom.hidden = true;
+exSel.appendChild(custom);
+function loadScript(text, fit) {
+  src.value = text;
+  src.scrollTop = 0;
+  errorLine = null;
+  drawGutter();
+  store.set('eisen-draft', text);
+  pendingFit = fit;
+  build();
+}
+exSel.addEventListener('change', () => {
+  if (exSel.value === 'custom') return;
+  $('seed').value = 1;
+  loadScript(EISEN_EXAMPLES[+exSel.value].src, true);
+});
+src.addEventListener('input', () => { exSel.value = 'custom'; });
+$('open').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  loadScript(await f.text(), true);
+  exSel.value = 'custom';
+  e.target.value = '';
+});
+$('seed').addEventListener('change', () => build());
+$('reseed').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 100000); build(); });
+
+// ---------- Live view ----------
+const view = $('view'), glCanvas = $('gl'), shot = $('shot');
+let renderer = null, scene = null, camera = null, controls = null, group = null, light = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.62));
+  light = new THREE.DirectionalLight(0xffffff, 0.62);
+  camera.add(light);
+  light.position.set(0.6, 1, 0.7);
+  scene.add(camera);
+  group = new THREE.Group();
+  scene.add(group);
+  controls = new THREE.OrbitControls(camera, glCanvas);
+  controls.addEventListener('change', () => { hideShot(); draw(); });
+} catch (e) {
+  renderer = null;
+  camera = null;
+  $('nogl').hidden = false;
+  $('hint').hidden = true;
+}
+// Keeps the camera for the raytracer when WebGL is off.
+const fallbackCam = { pos: [0, 0, 20], target: [0, 0, 0], up: [0, 1, 0], fov: 50 };
+
+function draw() { if (renderer) renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  if (renderer) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    draw();
+  }
+}
+new ResizeObserver(resize).observe(view);
+
+function disposeGroup() {
+  while (group.children.length) {
+    const c = group.children.pop();
+    c.geometry.dispose();
+    c.material.dispose();
+    if (c.dispose) c.dispose();
+  }
+}
+
+function instanced(data, geom) {
+  const n = data.length / 17;
+  if (!n) return;
+  let solid = 0;
+  for (let i = 0; i < n; i++) if (data[i * 17 + 15] >= 0.999) solid++;
+  const add = (count, wantSolid) => {
+    if (!count) return;
+    const mats = new Float32Array(count * 16), cols = new Float32Array(count * 3);
+    let k = 0, alpha = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 17, a = data[o + 15];
+      if ((a >= 0.999) !== wantSolid) continue;
+      const q = k * 16;
+      mats[q] = data[o]; mats[q + 1] = data[o + 1]; mats[q + 2] = data[o + 2];
+      mats[q + 4] = data[o + 3]; mats[q + 5] = data[o + 4]; mats[q + 6] = data[o + 5];
+      mats[q + 8] = data[o + 6]; mats[q + 9] = data[o + 7]; mats[q + 10] = data[o + 8];
+      mats[q + 12] = data[o + 9]; mats[q + 13] = data[o + 10]; mats[q + 14] = data[o + 11]; mats[q + 15] = 1;
+      cols[k * 3] = data[o + 12]; cols[k * 3 + 1] = data[o + 13]; cols[k * 3 + 2] = data[o + 14];
+      alpha += a;
+      k++;
+    }
+    const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, specular: 0x1c1c1c, shininess: 40, side: THREE.DoubleSide });
+    if (!wantSolid) { mat.transparent = true; mat.opacity = alpha / count; mat.depthWrite = false; }
+    const mesh = new THREE.InstancedMesh(geom.clone(), mat, count);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  };
+  add(solid, true);
+  add(n - solid, false);
+  geom.dispose();
+}
+
+function buildMeshes(r) {
+  disposeGroup();
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5);
+  const nSph = r.spheres.length / 17;
+  const res = nSph > 60000 ? [8, 6] : nSph > 5000 ? [14, 10] : [28, 18];
+  const sphGeo = new THREE.SphereGeometry(0.5, res[0], res[1]).translate(0.5, 0.5, 0.5);
+  instanced(r.boxes, boxGeo);
+  instanced(r.spheres, sphGeo);
+
+  const nTri = r.tris.length / 14;
+  if (nTri) {
+    const pos = new Float32Array(nTri * 9), col = new Float32Array(nTri * 9);
+    let solid = true, alpha = 0;
+    for (let i = 0; i < nTri; i++) {
+      const o = i * 14;
+      for (let k = 0; k < 9; k++) pos[i * 9 + k] = r.tris[o + k];
+      for (let v = 0; v < 3; v++) for (let c = 0; c < 3; c++) col[i * 9 + v * 3 + c] = r.tris[o + 9 + c];
+      alpha += r.tris[o + 12];
+      if (r.tris[o + 12] < 0.999) solid = false;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const mat = new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, specular: 0x1c1c1c });
+    if (!solid) { mat.transparent = true; mat.opacity = alpha / nTri; mat.depthWrite = false; }
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  }
+
+  const nGrid = r.grids.length / 17, nLine = r.lines.length / 10;
+  if (nGrid || nLine) {
+    const count = nGrid * 24 + nLine * 2;
+    const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+    let k = 0;
+    const put = (x, y, z, cr, cg, cb) => { pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z; col[k * 3] = cr; col[k * 3 + 1] = cg; col[k * 3 + 2] = cb; k++; };
+    const E = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+    for (let i = 0; i < nGrid; i++) {
+      const o = i * 17, d = r.grids;
+      for (const pair of E) for (const c of pair) {
+        const u = c & 1, v = (c >> 1) & 1, w = (c >> 2) & 1;
+        put(d[o] * u + d[o + 3] * v + d[o + 6] * w + d[o + 9], d[o + 1] * u + d[o + 4] * v + d[o + 7] * w + d[o + 10], d[o + 2] * u + d[o + 5] * v + d[o + 8] * w + d[o + 11], d[o + 12], d[o + 13], d[o + 14]);
+      }
+    }
+    for (let i = 0; i < nLine; i++) {
+      const o = i * 10, d = r.lines;
+      put(d[o], d[o + 1], d[o + 2], d[o + 6], d[o + 7], d[o + 8]);
+      put(d[o + 3], d[o + 4], d[o + 5], d[o + 6], d[o + 7], d[o + 8]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const ln = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+    ln.frustumCulled = false;
+    group.add(ln);
+  }
+
+  const nDot = r.dots.length / 7;
+  if (nDot) {
+    const pos = new Float32Array(nDot * 3), col = new Float32Array(nDot * 3);
+    for (let i = 0; i < nDot; i++) {
+      for (let c = 0; c < 3; c++) { pos[i * 3 + c] = r.dots[i * 7 + c]; col[i * 3 + c] = r.dots[i * 7 + 3 + c]; }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true }));
+    pts.frustumCulled = false;
+    group.add(pts);
+  }
+}
+
+function setClipping(r) {
+  if (!renderer) return;
+  const b = r.bounds, radius = Math.max(1e-3, Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2);
+  const c = new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
+  const dist = camera.position.distanceTo(c);
+  camera.near = Math.max(radius * 0.002, (dist - radius * 1.5) * 0.5);
+  camera.far = (dist + radius * 2) * 2;
+  camera.updateProjectionMatrix();
+}
+
+function fitView() {
+  if (!lastResult) return;
+  const b = lastResult.bounds;
+  const center = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+  const radius = Math.max(1e-3, Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2);
+  const cam = lastResult.settings.camera;
+  const fov = cam.fov || 50;
+  const aspect = view.clientWidth / Math.max(1, view.clientHeight);
+  let pos, target = center, up = [0, 1, 0];
+  if (cam.translation || cam.rotation) {
+    // Places the camera from the script's saved view settings.
+    const t = cam.translation || [0, 0, -20], R = cam.rotation || [1, 0, 0, 0, 1, 0, 0, 0, 1], piv = cam.pivot || [0, 0, 0], sc = cam.scale || 1;
+    const lx = -t[0] / sc, ly = -t[1] / sc, lz = -t[2] / sc;
+    pos = [piv[0] + R[0] * lx + R[3] * ly + R[6] * lz, piv[1] + R[1] * lx + R[4] * ly + R[7] * lz, piv[2] + R[2] * lx + R[5] * ly + R[8] * lz];
+    // Aims straight ahead, so a saved off-center view stays off-center.
+    const ahead = Math.abs(t[2] / sc) || 1;
+    target = [pos[0] - R[6] * ahead, pos[1] - R[7] * ahead, pos[2] - R[8] * ahead];
+    up = [R[3], R[4], R[5]];
+  } else {
+    const dir = [0.42, 0.34, 0.84];
+    const dist = radius / Math.sin(Math.min(fov, fov * aspect) * Math.PI / 360) * 1.02;
+    pos = [center[0] + dir[0] * dist, center[1] + dir[1] * dist, center[2] + dir[2] * dist];
+  }
+  fallbackCam.pos = pos; fallbackCam.target = target; fallbackCam.up = up; fallbackCam.fov = fov;
+  if (renderer) {
+    camera.fov = fov;
+    camera.up.set(up[0], up[1], up[2]);
+    camera.position.set(pos[0], pos[1], pos[2]);
+    controls.target.set(target[0], target[1], target[2]);
+    controls.update();
+    setClipping(lastResult);
+    draw();
+  }
+}
+$('fit').addEventListener('click', () => { hideShot(); fitView(); });
+
+// ---------- Build ----------
+let buildWorker = null, buildId = 0, lastResult = null, pendingFit = true;
+const status = t => { $('status').textContent = t; };
+
+function build() {
+  stopRender();
+  hideShot();
+  if (buildWorker) buildWorker.terminate();
+  const id = ++buildId;
+  buildWorker = new Worker('engine.js');
+  status('Building...');
+  buildWorker.onmessage = e => {
+    const m = e.data;
+    if (m.id !== id) return;
+    if (m.progress !== undefined) { status('Building... ' + m.progress.toLocaleString('en-US') + ' objects'); return; }
+    buildWorker.terminate();
+    buildWorker = null;
+    if (!m.ok) { showError(m); return; }
+    showResult(m.result);
+  };
+  buildWorker.onerror = e => {
+    if (id === buildId) showError({ message: 'The build stopped unexpectedly. The script may need too much memory. Lower its recursion depth and try again.', line: null });
+  };
+  buildWorker.postMessage({ id, src: src.value, seed: parseInt($('seed').value, 10) || 0 });
+}
+
+function showError(m) {
+  errorLine = m.line;
+  drawGutter();
+  $('errors').textContent = (m.line ? 'Line ' + m.line + ': ' : '') + m.message;
+  $('errors').hidden = false;
+  status('Showing the last working build');
+}
+
+function showResult(r) {
+  errorLine = null;
+  drawGutter();
+  $('errors').hidden = true;
+  lastResult = r;
+  if (r.seedFromScript) $('seed').value = r.seed;
+  const w = r.warnings.slice();
+  const liveOnly = r.grids.length + r.lines.length + r.dots.length;
+  if (liveOnly) w.push('Grids, lines and dots show only in the live view, not in Raytrace.');
+  $('warnings').textContent = w.join(' ');
+  $('warnings').hidden = !w.length;
+  $('rObjects').textContent = r.stats.objects.toLocaleString('en-US');
+  $('rGens').textContent = r.stats.generations.toLocaleString('en-US');
+  $('rMs').textContent = r.stats.ms.toLocaleString('en-US');
+  status(r.stats.objects ? 'Ready' : 'This script draws nothing. Call a rule or a shape outside your rule definitions.');
+  if (renderer) {
+    const bg = r.settings.background;
+    scene.background = new THREE.Color(bg[0], bg[1], bg[2]);
+    buildMeshes(r);
+  }
+  if (pendingFit) { fitView(); pendingFit = false; }
+  else setClipping(r);
+  resize();
+}
+
+// ---------- Raytrace ----------
+let rt = null;
+function hideShot() { shot.hidden = true; if (renderer) $('hint').hidden = false; }
+function stopRender() {
+  if (!rt) return;
+  rt.workers.forEach(w => w.terminate());
+  rt = null;
+  $('render').textContent = 'Raytrace';
+  $('bar').style.width = '0';
+}
+function currentCamera() {
+  if (!renderer) return fallbackCam;
+  const p = camera.position, t = controls.target, u = camera.up;
+  return { pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z], up: [u.x, u.y, u.z], fov: camera.fov };
+}
+function startRender() {
+  if (rt) { stopRender(); status('Raytrace stopped'); return; }
+  if (!lastResult) return;
+  const r = lastResult, set = r.settings.raytracer;
+  const scriptSamples = parseInt(set.samples, 10);
+  const q = $('quality').value;
+  // A script's samples value N means N x N per pixel.
+  const samples = q === 'draft' ? 4 : q === 'high' ? 64 : scriptSamples > 0 ? Math.min(64, scriptSamples * scriptSamples) : 16;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(view.clientWidth * dpr)), height = Math.max(1, Math.round(view.clientHeight * dpr));
+  shot.width = width; shot.height = height;
+  const ctx = shot.getContext('2d');
+  if (renderer) { draw(); ctx.drawImage(glCanvas, 0, 0, width, height); }
+  shot.hidden = false;
+  $('hint').hidden = true;
+
+  const size = 48, tiles = [];
+  for (let y = 0; y < height; y += size) for (let x = 0; x < width; x += size) {
+    tiles.push({ x, y, w: Math.min(size, width - x), h: Math.min(size, height - y) });
+  }
+  const cx = width / 2, cy = height / 2;
+  tiles.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+  tiles.reverse();
+
+  const count = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
+  const total = tiles.length, t0 = performance.now();
+  let done = 0;
+  const job = { workers: [] };
+  rt = job;
+  $('render').textContent = 'Stop';
+  status('Raytracing...');
+  const scene_ = {
+    type: 'scene', boxes: r.boxes, spheres: r.spheres, tris: r.tris, classes: r.classes, bounds: r.bounds,
+    raytracer: set, background: r.settings.background, camera: currentCamera(), samples, width, height,
+  };
+  for (let i = 0; i < count; i++) {
+    const w = new Worker('raytrace.js');
+    job.workers.push(w);
+    const giveTile = () => { const t = tiles.pop(); if (t) w.postMessage(Object.assign({ type: 'tile' }, t)); };
+    w.onmessage = e => {
+      if (rt !== job) return;
+      const m = e.data;
+      if (m.type === 'ready') { giveTile(); return; }
+      ctx.putImageData(new ImageData(m.px, m.w, m.h), m.x, m.y);
+      done++;
+      $('bar').style.width = (done / total * 100) + '%';
+      if (done === total) {
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        stopRender();
+        status('Raytraced ' + width + ' x ' + height + ' at ' + samples + ' samples in ' + secs + ' s. Drag to return to the live view.');
+      } else giveTile();
+    };
+    w.onerror = () => {
+      if (rt !== job) return;
+      stopRender();
+      status('Raytrace stopped because of an error. Try a smaller model.');
+    };
+    w.postMessage(scene_);
+  }
+}
+$('render').addEventListener('click', startRender);
+
+// ---------- Saving ----------
+// The viewer's save service can arrive after this script runs, or not at all.
+let downloadsReady = null;
+function getDownloads() {
+  if (!downloadsReady) {
+    downloadsReady = (async () => {
+      for (let i = 0; i < 25 && !(window.claude && window.claude.use); i++) await new Promise(r => setTimeout(r, 200));
+      return window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+    })().catch(() => null);
+  }
+  return downloadsReady;
+}
+getDownloads();
+
+// Returns true when the file was handled, or the viewer chose not to save it.
+let saveFailure = '';
+async function trySave(filename, data) {
+  const downloads = await getDownloads();
+  if (!downloads) { saveFailure = 'not available in this view'; return false; }
+  try {
+    await downloads.save({ filename, data });
+    status('Saved ' + filename);
+    return true;
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'declined') { status('Save canceled'); return true; }
+    if (code === 'rate_limited') { status('A save prompt is already open.'); return true; }
+    saveFailure = code || (e && e.message) || 'unknown error';
+    return false;
+  }
+}
+
+let saveUrl = null;
+function showSaveImage(blob) {
+  if (saveUrl) URL.revokeObjectURL(saveUrl);
+  saveUrl = URL.createObjectURL(blob);
+  $('saveImg').src = saveUrl;
+  $('saveImg').hidden = false;
+  $('saveText').hidden = true;
+  $('saveCopy').hidden = true;
+  $('saveNote').textContent = 'Right-click the image and choose Save Image As. On a phone, press and hold it.';
+  $('saveBox').hidden = false;
+}
+let copyLabel = 'Copy script';
+function showSaveText(reason, text, what) {
+  copyLabel = 'Copy ' + what;
+  $('saveText').value = text;
+  $('saveText').hidden = false;
+  $('saveCopy').hidden = false;
+  $('saveCopy').textContent = copyLabel;
+  $('saveImg').hidden = true;
+  $('saveNote').textContent = 'The file didn\'t save (' + reason + '). Copy your ' + what + ' from here instead.';
+  $('saveBox').hidden = false;
+  status(what === 'script' ? 'Script not saved' : 'OBJ not saved');
+}
+function showSaveMessage(message) {
+  $('saveText').hidden = true;
+  $('saveCopy').hidden = true;
+  $('saveImg').hidden = true;
+  $('saveNote').textContent = message;
+  $('saveBox').hidden = false;
+  status('OBJ not saved');
+}
+$('saveClose').addEventListener('click', () => { $('saveBox').hidden = true; });
+$('saveCopy').addEventListener('click', () => {
+  const box = $('saveText');
+  const manual = () => {
+    box.focus();
+    box.select();
+    $('saveCopy').textContent = 'Press Cmd+C or Ctrl+C';
+  };
+  if (!navigator.clipboard) { manual(); return; }
+  $('saveCopy').textContent = copyLabel;
+  navigator.clipboard.writeText(box.value).then(() => { $('saveCopy').textContent = 'Copied'; }, manual);
+});
+
+$('savePng').addEventListener('click', () => {
+  const useShot = !shot.hidden;
+  if (!useShot) draw();
+  (useShot ? shot : glCanvas).toBlob(async b => {
+    if (!b) { status('The image could not be created. Try Raytrace, then save again.'); return; }
+    if (!await trySave('structure-synth.png', b)) showSaveImage(b);
+  }, 'image/png');
+});
+
+$('saveTxt').addEventListener('click', () => {
+  status('Saving script...');
+  let settled = false;
+  // If no save result arrives, the copy panel still gives a visible way out.
+  const timer = setTimeout(() => { if (!settled) showSaveText('no response from the viewer', src.value, 'script'); }, 8000);
+  trySave('structure-synth-script.txt', new Blob([src.value], { type: 'text/plain' })).then(ok => {
+    settled = true;
+    clearTimeout(timer);
+    if (ok) $('saveBox').hidden = true;
+    else showSaveText(saveFailure, src.value, 'script');
+  });
+});
+
+let objWorker = null;
+$('saveObj').addEventListener('click', () => {
+  if (!lastResult || !lastResult.stats.objects) { showSaveMessage('There is no model to export yet. Build a script that draws something first.'); return; }
+  if (lastResult.stats.objects > 300000) {
+    showSaveMessage('This model has ' + lastResult.stats.objects.toLocaleString('en-US') + ' objects, and OBJ export stops at 300,000. Lower the recursion depth and try again.');
+    return;
+  }
+  if (objWorker) objWorker.terminate();
+  const r = lastResult;
+  const w = objWorker = new Worker('objexport.js');
+  status('Exporting OBJ...');
+  $('saveObj').disabled = true;
+  const finish = () => { w.terminate(); objWorker = null; $('saveObj').disabled = false; };
+  w.onmessage = async e => {
+    finish();
+    const m = e.data;
+    if (!m.ok) { showSaveMessage('The export failed: ' + m.message); return; }
+    const showCopy = reason => {
+      if (m.objText) showSaveText(reason, m.objText, 'OBJ');
+      else showSaveMessage('The file didn\'t save (' + reason + '), and this model is too large to copy as text. Lower the recursion depth and try again.');
+    };
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) showCopy('no response from the viewer'); }, 8000);
+    const ok = await trySave('structure-synth-model.zip', m.blob);
+    settled = true;
+    clearTimeout(timer);
+    if (ok) $('saveBox').hidden = true;
+    else showCopy(saveFailure);
+  };
+  w.onerror = () => { finish(); showSaveMessage('The export stopped unexpectedly. The model may need too much memory. Lower the recursion depth and try again.'); };
+  w.postMessage({ boxes: r.boxes, spheres: r.spheres, grids: r.grids, tris: r.tris, lines: r.lines, dots: r.dots });
+});
+
+// ---------- Start ----------
+const draft = store.get('eisen-draft');
+const isExample = draft !== null && EISEN_EXAMPLES.some(ex => ex.src === draft);
+if (draft !== null && draft.trim() && !isExample) {
+  exSel.value = 'custom';
+  loadScript(draft, true);
+} else {
+  const i = isExample ? EISEN_EXAMPLES.findIndex(ex => ex.src === draft) : 0;
+  exSel.value = i;
+  loadScript(EISEN_EXAMPLES[i].src, true);
+}
+</script>
