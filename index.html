@@ -128,6 +128,9 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
         <select id="example"></select>
         <button id="open" type="button">Open file</button>
         <input id="file" type="file" accept=".es,.txt,text/plain" hidden>
+        <button id="colorImage" type="button" title="Choose the picture used by set colorpool image:">Color image</button>
+        <button id="clearImage" type="button" hidden>Clear image</button>
+        <input id="imageFile" type="file" accept="image/*" hidden>
       </div>
       <div class="group">
         <label class="lab" for="seed">Seed</label>
@@ -175,11 +178,11 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
           <tr><td>hue sat b a</td><td>Add to hue. Multiply saturation, brightness and alpha.</td></tr>
           <tr><td>color #0af</td><td>Set a color. <code>color random</code> picks from the color pool.</td></tr>
           <tr><td>blend red 0.3</td><td>Mix toward a color.</td></tr>
-          <tr><td>box sphere grid line dot</td><td>Shapes. Add a class with <code>box::shiny</code>.</td></tr>
+          <tr><td>box sphere cylinder grid line dot</td><td>Shapes. Add a class with <code>box::shiny</code>. Cylinders run along x.</td></tr>
           <tr><td>triangle[a;b;c]</td><td>A triangle from three x,y,z points.</td></tr>
           <tr><td>#define k 3</td><td>Replaces the word k with 3.</td></tr>
           <tr><td>set maxdepth 100</td><td>Also: maxobjects, minsize, maxsize, seed, background, colorpool, recursion, syncrandom.</td></tr>
-          <tr><td>set colorpool list:a,b</td><td>Also: randomhue, randomrgb, greyscale.</td></tr>
+          <tr><td>set colorpool list:a,b</td><td>Also: randomhue, randomrgb, greyscale, and image:name.jpg, which samples the picture you choose with Color image.</td></tr>
           <tr><td>set raytracer::samples 16</td><td>Also: shadows, phong, dof, ambient-occlusion-samples, shiny::reflection.</td></tr>
           <tr><td>Cmd/Ctrl + Enter</td><td>Build now. Scripts also build as you type.</td></tr>
         </table>
@@ -300,6 +303,43 @@ $('file').addEventListener('change', async e => {
   exSel.value = 'custom';
   e.target.value = '';
 });
+// The picture for `set colorpool image:`. A page can't open a script's file
+// path, so the viewer chooses one. It stays in this browser tab.
+let colorImage = null, imageJustChosen = false;
+$('colorImage').addEventListener('click', () => $('imageFile').click());
+$('imageFile').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) await chooseColorImage(f);
+});
+async function chooseColorImage(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bitmap.width * scale));
+    c.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, c.width, c.height);
+    const pixels = ctx.getImageData(0, 0, c.width, c.height);
+    colorImage = { width: c.width, height: c.height, data: pixels.data };
+    bitmap.close();
+    imageJustChosen = true;
+    $('colorImage').textContent = 'Color image: ' + (file.name.length > 18 ? file.name.slice(0, 15) + '...' : file.name);
+    $('clearImage').hidden = false;
+    build();
+  } catch (err) {
+    $('errors').textContent = 'That file could not be read as an image. Try a JPEG or PNG.';
+    $('errors').hidden = false;
+  }
+}
+$('clearImage').addEventListener('click', () => {
+  colorImage = null;
+  $('colorImage').textContent = 'Color image';
+  $('clearImage').hidden = true;
+  build();
+});
+
 $('seed').addEventListener('change', () => build());
 $('reseed').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 100000); build(); });
 
@@ -393,6 +433,9 @@ function buildMeshes(r) {
   const sphGeo = new THREE.SphereGeometry(0.5, res[0], res[1]).translate(0.5, 0.5, 0.5);
   instanced(r.boxes, boxGeo);
   instanced(r.spheres, sphGeo);
+  const nCyl = r.cylinders.length / 17;
+  const cylRes = nCyl > 60000 ? 8 : nCyl > 5000 ? 14 : 32;
+  instanced(r.cylinders, new THREE.CylinderGeometry(0.5, 0.5, 1, cylRes).rotateZ(-Math.PI / 2).translate(0.5, 0.5, 0.5));
 
   const nTri = r.tris.length / 14;
   if (nTri) {
@@ -527,7 +570,7 @@ function build() {
   buildWorker.onerror = e => {
     if (id === buildId) showError({ message: 'The build stopped unexpectedly. The script may need too much memory. Lower its recursion depth and try again.', line: null });
   };
-  buildWorker.postMessage({ id, src: src.value, seed: parseInt($('seed').value, 10) || 0 });
+  buildWorker.postMessage({ id, src: src.value, seed: parseInt($('seed').value, 10) || 0, colorImage });
 }
 
 function showError(m) {
@@ -545,8 +588,8 @@ function showResult(r) {
   lastResult = r;
   if (r.seedFromScript) $('seed').value = r.seed;
   const w = r.warnings.slice();
-  const liveOnly = r.grids.length + r.lines.length + r.dots.length;
-  if (liveOnly) w.push('Grids, lines and dots show only in the live view, not in Raytrace.');
+  if (imageJustChosen && !r.usesImagePool) w.push('This script doesn\'t use the color image. Add "set colorpool image:name.jpg" and "color random" to use it.');
+  imageJustChosen = false;
   $('warnings').textContent = w.join(' ');
   $('warnings').hidden = !w.length;
   $('rObjects').textContent = r.stats.objects.toLocaleString('en-US');
@@ -610,7 +653,7 @@ function startRender() {
   $('render').textContent = 'Stop';
   status('Raytracing...');
   const scene_ = {
-    type: 'scene', boxes: r.boxes, spheres: r.spheres, tris: r.tris, classes: r.classes, bounds: r.bounds,
+    type: 'scene', boxes: r.boxes, spheres: r.spheres, cylinders: r.cylinders, grids: r.grids, lines: r.lines, dots: r.dots, tris: r.tris, classes: r.classes, bounds: r.bounds,
     raytracer: set, background: r.settings.background, camera: currentCamera(), samples, width, height,
   };
   for (let i = 0; i < count; i++) {
@@ -786,7 +829,7 @@ $('saveObj').addEventListener('click', () => {
     else showCopy(saveFailure);
   };
   w.onerror = () => { finish(); showSaveMessage('The export stopped unexpectedly. The model may need too much memory. Lower the recursion depth and try again.'); };
-  w.postMessage({ boxes: r.boxes, spheres: r.spheres, grids: r.grids, tris: r.tris, lines: r.lines, dots: r.dots });
+  w.postMessage({ boxes: r.boxes, spheres: r.spheres, cylinders: r.cylinders, grids: r.grids, tris: r.tris, lines: r.lines, dots: r.dots });
 });
 
 // ---------- Start ----------

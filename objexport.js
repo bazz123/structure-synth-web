@@ -34,6 +34,26 @@ const SPHERE_FACES = [];
   }
 }
 
+// A unit-box cylinder along x: a ring at each end, with side quads and two caps.
+const CYL_SEGMENTS = 16;
+const CYLINDER_VERTS = [], CYLINDER_FACES = [];
+for (const x of [0, 1]) {
+  for (let s = 0; s < CYL_SEGMENTS; s++) {
+    const theta = 2 * Math.PI * s / CYL_SEGMENTS;
+    CYLINDER_VERTS.push([x, 0.5 + 0.5 * Math.cos(theta), 0.5 + 0.5 * Math.sin(theta)]);
+  }
+}
+{
+  const ring0 = [], ring1 = [];
+  for (let s = 0; s < CYL_SEGMENTS; s++) {
+    const n = (s + 1) % CYL_SEGMENTS;
+    CYLINDER_FACES.push([s, n, CYL_SEGMENTS + n, CYL_SEGMENTS + s]);
+    ring0.unshift(s);
+    ring1.push(CYL_SEGMENTS + s);
+  }
+  CYLINDER_FACES.push(ring0, ring1);
+}
+
 const fmt = v => String(+v.toFixed(6));
 const col = v => String(+v.toFixed(3));
 
@@ -41,6 +61,7 @@ function exportModel(r, sink) {
   const kinds = [
     { key: 'box', data: r.boxes, stride: 17, c: 12 },
     { key: 'sphere', data: r.spheres, stride: 17, c: 12 },
+    { key: 'cylinder', data: r.cylinders, stride: 17, c: 12 },
     { key: 'grid', data: r.grids, stride: 17, c: 12 },
     { key: 'tri', data: r.tris, stride: 14, c: 9 },
     { key: 'line', data: r.lines, stride: 10, c: 6 },
@@ -76,8 +97,8 @@ function exportModel(r, sink) {
       const kind = g.items[k], i = g.items[k + 1], d = kind.data, o = i * kind.stride;
       const cs = ' ' + col(d[o + kind.c]) + ' ' + col(d[o + kind.c + 1]) + ' ' + col(d[o + kind.c + 2]) + '\n';
       let s = '';
-      if (kind.key === 'box' || kind.key === 'sphere' || kind.key === 'grid') {
-        const local = kind.key === 'sphere' ? SPHERE_VERTS : null;
+      if (kind.key === 'box' || kind.key === 'sphere' || kind.key === 'cylinder' || kind.key === 'grid') {
+        const local = kind.key === 'sphere' ? SPHERE_VERTS : kind.key === 'cylinder' ? CYLINDER_VERTS : null;
         const vcount = local ? local.length : 8;
         for (let v = 0; v < vcount; v++) {
           const u = local ? local[v][0] : v & 1, w = local ? local[v][1] : (v >> 1) & 1, t = local ? local[v][2] : (v >> 2) & 1;
@@ -88,7 +109,7 @@ function exportModel(r, sink) {
         } else {
           // Mirrored transforms turn faces inside out, so their winding flips.
           const det = d[o] * (d[o + 4] * d[o + 8] - d[o + 7] * d[o + 5]) - d[o + 3] * (d[o + 1] * d[o + 8] - d[o + 7] * d[o + 2]) + d[o + 6] * (d[o + 1] * d[o + 5] - d[o + 4] * d[o + 2]);
-          const faces = local ? SPHERE_FACES : BOX_FACES;
+          const faces = kind.key === 'sphere' ? SPHERE_FACES : kind.key === 'cylinder' ? CYLINDER_FACES : BOX_FACES;
           for (const f of faces) {
             const ids = f.map(x => base + x);
             if (det < 0) ids.reverse();

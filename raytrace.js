@@ -10,9 +10,10 @@ function vecSetting(v, n) {
 }
 
 function buildScene(msg) {
-  const { boxes, spheres, tris } = msg;
-  const nb = boxes.length / 17, ns = spheres.length / 17, nt = tris.length / 14;
-  const cap = nb + ns + nt;
+  const { boxes, spheres, cylinders, grids, lines, dots, tris } = msg;
+  const nb = boxes.length / 17, ns = spheres.length / 17, nc = cylinders.length / 17, nt = tris.length / 14;
+  const ng = grids.length / 17, nl = lines.length / 10, nd = dots.length / 7;
+  const cap = nb + ns + nc + nt + ng * 12 + nl + nd;
   const type = new Uint8Array(cap), inv = new Float64Array(cap * 12), tri = new Float64Array(cap * 9 * (nt ? 1 : 0));
   const color = new Float32Array(cap * 4), cls = new Uint8Array(cap);
   const lo = new Float32Array(cap * 3), hi = new Float32Array(cap * 3);
@@ -45,6 +46,52 @@ function buildScene(msg) {
   }
   for (let i = 0; i < nb; i++) addAffine(boxes, i * 17, 0);
   for (let i = 0; i < ns; i++) addAffine(spheres, i * 17, 1);
+  for (let i = 0; i < nc; i++) addAffine(cylinders, i * 17, 3);
+
+  // Grids, lines and dots have no thickness of their own, so each becomes thin
+  // geometry sized to the pixel at its distance, matching the live view.
+  const lineCam = msg.camera;
+  const worldPerPixel = (x, y, z) => Math.hypot(x - lineCam.pos[0], y - lineCam.pos[1], z - lineCam.pos[2]) * 2 * Math.tan(lineCam.fov * Math.PI / 360) / msg.height;
+  const rec = new Float64Array(17);
+  function addRod(x0, y0, z0, x1, y1, z1, r, g, b, a, cid) {
+    const ux = x1 - x0, uy = y1 - y0, uz = z1 - z0, len = Math.hypot(ux, uy, uz);
+    if (len < 1e-9) return;
+    const d = 1.5 * worldPerPixel((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    // Two directions at right angles to the rod set its diameter.
+    let vx = -uy, vy = ux, vz = 0;
+    if (Math.abs(uz) > 0.9 * len) { vx = 0; vy = -uz; vz = uy; }
+    const vl = Math.hypot(vx, vy, vz);
+    vx *= d / vl; vy *= d / vl; vz *= d / vl;
+    let wx = uy * vz - uz * vy, wy = uz * vx - ux * vz, wz = ux * vy - uy * vx;
+    wx *= d / (len * d); wy *= d / (len * d); wz *= d / (len * d);
+    rec[0] = ux; rec[1] = uy; rec[2] = uz;
+    rec[3] = vx; rec[4] = vy; rec[5] = vz;
+    rec[6] = wx; rec[7] = wy; rec[8] = wz;
+    rec[9] = x0 - 0.5 * (vx + wx); rec[10] = y0 - 0.5 * (vy + wy); rec[11] = z0 - 0.5 * (vz + wz);
+    rec[12] = r; rec[13] = g; rec[14] = b; rec[15] = a; rec[16] = cid;
+    addAffine(rec, 0, 3);
+  }
+  const GRID_EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  for (let i = 0; i < ng; i++) {
+    const o = i * 17, m = grids;
+    const px = c => m[o] * (c & 1) + m[o + 3] * ((c >> 1) & 1) + m[o + 6] * ((c >> 2) & 1) + m[o + 9];
+    const py = c => m[o + 1] * (c & 1) + m[o + 4] * ((c >> 1) & 1) + m[o + 7] * ((c >> 2) & 1) + m[o + 10];
+    const pz = c => m[o + 2] * (c & 1) + m[o + 5] * ((c >> 1) & 1) + m[o + 8] * ((c >> 2) & 1) + m[o + 11];
+    for (const [a, b] of GRID_EDGES) addRod(px(a), py(a), pz(a), px(b), py(b), pz(b), m[o + 12], m[o + 13], m[o + 14], m[o + 15], m[o + 16]);
+  }
+  for (let i = 0; i < nl; i++) {
+    const o = i * 10;
+    addRod(lines[o], lines[o + 1], lines[o + 2], lines[o + 3], lines[o + 4], lines[o + 5], lines[o + 6], lines[o + 7], lines[o + 8], lines[o + 9], 0);
+  }
+  for (let i = 0; i < nd; i++) {
+    const o = i * 7, x = dots[o], y = dots[o + 1], z = dots[o + 2];
+    const d = 3 * worldPerPixel(x, y, z);
+    rec.fill(0);
+    rec[0] = d; rec[4] = d; rec[8] = d;
+    rec[9] = x - d / 2; rec[10] = y - d / 2; rec[11] = z - d / 2;
+    rec[12] = dots[o + 3]; rec[13] = dots[o + 4]; rec[14] = dots[o + 5]; rec[15] = dots[o + 6];
+    addAffine(rec, 0, 1);
+  }
   for (let i = 0; i < nt; i++) {
     const o = i * 14, p = n++, q = p * 9;
     type[p] = 2;
@@ -215,6 +262,36 @@ function trace(ox, oy, oz, dx, dy, dz, tmax, any) {
           best = t; bestP = p;
           if (any) return true;
           bestAxis = axis; bestSign = sign;
+        }
+      } else if (ty === 3) {
+        // Unit cylinder: axis along x from 0 to 1, radius 0.5, centered on y and z.
+        const cy = ly - 0.5, cz = lz - 0.5;
+        const A = ldy * ldy + ldz * ldz, B = cy * ldy + cz * ldz, C = cy * cy + cz * cz - 0.25;
+        let found = Infinity, nx = 0, ny = 0, nz = 0;
+        if (A > 1e-18) {
+          const disc = B * B - A * C;
+          if (disc >= 0) {
+            const sq = Math.sqrt(disc);
+            for (const side of [(-B - sq) / A, (-B + sq) / A]) {
+              const sx = lx + ldx * side;
+              if (side > EPS && side < found && sx >= 0 && sx <= 1) {
+                found = side; nx = 0; ny = cy + ldy * side; nz = cz + ldz * side;
+              }
+            }
+          }
+        }
+        if (Math.abs(ldx) > 1e-14) {
+          for (const plane of [0, 1]) {
+            const cap = (plane - lx) / ldx, ey = cy + ldy * cap, ez = cz + ldz * cap;
+            if (cap > EPS && cap < found && ey * ey + ez * ez <= 0.25) {
+              found = cap; nx = plane ? 1 : -1; ny = 0; nz = 0;
+            }
+          }
+        }
+        if (found < best) {
+          best = found; bestP = p;
+          if (any) return true;
+          bx = nx; by = ny; bz = nz;
         }
       } else {
         const cx = lx - 0.5, cy = ly - 0.5, cz = lz - 0.5;

@@ -43,9 +43,10 @@ The engine was written from the language's behavior, not translated from the ori
 
 - Random results differ from the original, even with the same seed
 - Raytrace settings are an approximation, and the field of view is an estimate
-- `cylinder` draws as a box
-- Templates and image color pools aren't supported
-- Grids, lines and dots appear only in the live view, not in raytraced images
+- `cylinder` runs along the x axis, which is an assumption
+- `set colorpool image:` samples a picture you choose with the Color image button, because a web page can't open the file named in a script
+- Grids, lines and dots raytrace as thin rods and small spheres about a pixel wide
+- Templates aren't supported
 - Builds stop at 1,000,000 objects, and OBJ export stops at 300,000
 
 ## License

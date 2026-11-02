@@ -326,7 +326,7 @@ function build(src, opts) {
   const warn = w => { if (warnings.indexOf(w) < 0) warnings.push(w); };
 
   const settings = { maxdepth: 1000, maxobjects: HARD_MAX_OBJECTS, minsize: 0, maxsize: 1e9, background: [0, 0, 0], camera: {}, raytracer: {}, recursion: 'breadth' };
-  let sync = false, pool = { kind: 'randomhue' }, seedFromScript = false;
+  let sync = false, pool = { kind: 'randomhue' }, seedFromScript = false, usesImagePool = false;
 
   function applySet(s) {
     const v = s.value, k = s.key;
@@ -353,7 +353,9 @@ function build(src, opts) {
         if (!colors.length) throw new ScriptError('colorpool list: needs at least one color.', s.line);
         pool = { kind: 'list', colors };
       } else if (lc.startsWith('image:')) {
-        warn('Image color pools aren\'t supported, so random hues are used instead.');
+        usesImagePool = true;
+        if (options.colorImage) pool = { kind: 'image', image: options.colorImage };
+        else warn('This script takes its colors from "' + v.slice(6) + '". Click Color image to choose a picture. Random hues are used until then.');
       } else throw new ScriptError('colorpool must be randomhue, randomrgb, greyscale or list:a,b,c.', s.line);
     }
     else if (k === 'translation') settings.camera.translation = vec(3);
@@ -391,7 +393,7 @@ function build(src, opts) {
     return i;
   };
 
-  const boxes = new Buf(17), spheres = new Buf(17), grids = new Buf(17), tris = new Buf(14), lines = new Buf(10), dots = new Buf(7);
+  const boxes = new Buf(17), spheres = new Buf(17), cylinders = new Buf(17), grids = new Buf(17), tris = new Buf(14), lines = new Buf(10), dots = new Buf(7);
   const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
   const grow = (x, y, z) => {
     if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (z < bb[2]) bb[2] = z;
@@ -406,9 +408,8 @@ function build(src, opts) {
     const m = st.m;
     if (!sizeOk(m)) return;
     const [r, g, b] = hsv2rgb(st.h, st.s, st.v);
-    let kind = a.prim;
+    const kind = a.prim;
     if (kind === 'template') { warn('Template primitives aren\'t supported and were skipped.'); return; }
-    if (kind === 'cylinder') { warn('"cylinder" is drawn as a box here.'); kind = 'box'; }
     // A mesh joins the square of the calling rule's state to this state's square.
     if (kind === 'mesh' && !st.p) return;
     objects++;
@@ -428,8 +429,8 @@ function build(src, opts) {
           d[o + 9] = r; d[o + 10] = g; d[o + 11] = b; d[o + 12] = st.a; d[o + 13] = cid;
         }
       }
-    } else if (kind === 'box' || kind === 'sphere' || kind === 'grid') {
-      const buf = kind === 'box' ? boxes : kind === 'sphere' ? spheres : grids;
+    } else if (kind === 'box' || kind === 'sphere' || kind === 'cylinder' || kind === 'grid') {
+      const buf = kind === 'box' ? boxes : kind === 'sphere' ? spheres : kind === 'cylinder' ? cylinders : grids;
       const o = buf.slot(), d = buf.a;
       d[o] = m[0]; d[o + 1] = m[1]; d[o + 2] = m[2];
       d[o + 3] = m[4]; d[o + 4] = m[5]; d[o + 5] = m[6];
@@ -472,6 +473,11 @@ function build(src, opts) {
     if (pool.kind === 'randomhue') return [col() * 360, 1, 1];
     if (pool.kind === 'randomrgb') return rgb2hsv([col(), col(), col()]);
     if (pool.kind === 'greyscale') return [0, 0, col()];
+    if (pool.kind === 'image') {
+      const { width, height, data } = pool.image;
+      const o = (Math.floor(col() * height) * width + Math.floor(col() * width)) * 4;
+      return rgb2hsv([data[o] / 255, data[o + 1] / 255, data[o + 2] / 255]);
+    }
     return pool.colors[Math.floor(col() * pool.colors.length)];
   }
 
@@ -597,9 +603,9 @@ function build(src, opts) {
   if (hitPending || hitSteps) warn('Stopped early because this script keeps branching without limit. Add md to the rule that repeats.');
 
   return {
-    boxes: boxes.done(), spheres: spheres.done(), grids: grids.done(), tris: tris.done(), lines: lines.done(), dots: dots.done(),
+    boxes: boxes.done(), spheres: spheres.done(), cylinders: cylinders.done(), grids: grids.done(), tris: tris.done(), lines: lines.done(), dots: dots.done(),
     bounds: objects ? bb : [0, 0, 0, 1, 1, 1],
-    settings, classes, seed, seedFromScript, warnings,
+    settings, classes, seed, seedFromScript, usesImagePool, warnings,
     stats: { objects, generations: maxGen, steps, ms: Date.now() - t0, hitDepth },
   };
 }
@@ -609,10 +615,10 @@ root.EisenEngine = api;
 
 if (typeof importScripts === 'function' && typeof self !== 'undefined' && typeof document === 'undefined') {
   self.onmessage = e => {
-    const { id, src, seed } = e.data;
+    const { id, src, seed, colorImage } = e.data;
     try {
-      const r = build(src, { seed, onProgress: n => self.postMessage({ id, progress: n }) });
-      self.postMessage({ id, ok: true, result: r }, [r.boxes.buffer, r.spheres.buffer, r.grids.buffer, r.tris.buffer, r.lines.buffer, r.dots.buffer]);
+      const r = build(src, { seed, colorImage, onProgress: n => self.postMessage({ id, progress: n }) });
+      self.postMessage({ id, ok: true, result: r }, [r.boxes.buffer, r.spheres.buffer, r.cylinders.buffer, r.grids.buffer, r.tris.buffer, r.lines.buffer, r.dots.buffer]);
     } catch (err) {
       self.postMessage({ id, ok: false, message: err.message, line: err.line || null });
     }
