@@ -1,0 +1,20 @@
+{
+  "name": "structure-synth-web",
+  "private": true,
+  "description": "Browser remake of Structure Synth",
+  "license": "GPL-3.0",
+  "scripts": {
+    "build:editor": "esbuild editor/codemirror-entry.js --bundle --minify --format=iife --global-name=CM --target=es2020 --outfile=vendor/codemirror.js --banner:js=\"/*! CodeMirror 6 (MIT License, Copyright (C) 2018-2021 Marijn Haverbeke and others). Bundled for Structure Synth Web: npm run build:editor. License texts: vendor/LICENSES.txt */\""
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "6.20.4",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/search": "6.7.2",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@lezer/highlight": "1.2.5",
+    "esbuild": "0.28.2"
+  }
+}

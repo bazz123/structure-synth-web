@@ -36,6 +36,19 @@ Save buttons download files directly when the page runs on its own. Inside the C
 | `objexport.js` | OBJ, MTL and ZIP export worker |
 | `examples.js` | Starter examples written for this project |
 | `examples-original.js` | Example scripts from the Structure Synth 1.5.0 download |
+| `editor/eisenscript.js` | Script editor: EisenScript colors, completion and error marks |
+| `editor/codemirror-entry.js` | The CodeMirror 6 parts bundled into `vendor/codemirror.js` |
+| `vendor/codemirror.js` | Prebuilt CodeMirror 6 bundle (MIT License), so the site needs no build step |
+| `vendor/LICENSES.txt` | License texts for the code in that bundle |
+
+## Rebuild the editor bundle
+
+Only needed after changing `editor/codemirror-entry.js` or updating CodeMirror:
+
+```bash
+npm install
+npm run build:editor
+```
 
 The engine was written from the language's behavior, not translated from the original C++ source.
 

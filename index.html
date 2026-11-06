@@ -12,16 +12,22 @@
 :root {
   --bg: #e6ebee; --panel: #f5f7f8; --panel-2: #dde3e7; --fg: #17222b; --muted: #55646f;
   --line: #bfc9d0; --accent: #1d4fd6; --accent-fg: #ffffff; --bad: #b3261e; --bad-bg: #fbe9e7; --warn: #8a5a00; --warn-bg: #fbf1d9;
+  --selection: #c9d7fb; --active-line: #e9eef1;
+  --syn-comment: #6b7a85; --syn-keyword: #8a2f8f; --syn-rule: #1d4fd6; --syn-transform: #0f6e6b; --syn-shape: #a33c12; --syn-number: #8a5a00; --syn-atom: #2e7d32;
   --ui: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
   --code: "Fragment Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #11161b; --panel: #192027; --panel-2: #232c34; --fg: #e4eaee; --muted: #9aa8b2;
-  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f; color-scheme: dark;
+  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f;
+  --selection: #2c4170; --active-line: #1f272f;
+  --syn-comment: #7f8d97; --syn-keyword: #e39bea; --syn-rule: #9fbcff; --syn-transform: #6fd3cc; --syn-shape: #ffab7a; --syn-number: #f0c56c; --syn-atom: #8fd694; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --bg: #11161b; --panel: #192027; --panel-2: #232c34; --fg: #e4eaee; --muted: #9aa8b2;
-  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f; color-scheme: dark;
+  --line: #34404a; --accent: #8fb0ff; --accent-fg: #0d1626; --bad: #ffb4ab; --bad-bg: #3a1a18; --warn: #f0c56c; --warn-bg: #33290f;
+  --selection: #2c4170; --active-line: #1f272f;
+  --syn-comment: #7f8d97; --syn-keyword: #e39bea; --syn-rule: #9fbcff; --syn-transform: #6fd3cc; --syn-shape: #ffab7a; --syn-number: #f0c56c; --syn-atom: #8fd694; color-scheme: dark;
 }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); }
@@ -55,16 +61,8 @@ button.primary:hover:not(:disabled) { background: var(--accent); filter: brightn
 
 .editor { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 8px; }
 .code { flex: 1; min-height: 0; display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-#gutter {
-  flex: none; width: 42px; padding: 10px 8px 10px 0; margin: 0; text-align: right; overflow: hidden; user-select: none;
-  font: 13px/20px var(--code); color: var(--muted); background: var(--panel-2); white-space: pre;
-}
-#gutter b { font-weight: 400; display: block; }
-#gutter b.err { background: var(--bad); color: var(--panel); margin-right: -8px; padding-right: 8px; }
-#src {
-  flex: 1; min-width: 0; border: 0; outline: 0; resize: none; padding: 10px 12px; background: transparent; color: var(--fg);
-  font: 13px/20px var(--code); white-space: pre; overflow: auto; tab-size: 2;
-}
+#editor { flex: 1; min-width: 0; min-height: 0; }
+.code:focus-within { border-color: var(--accent); }
 .msg { border-radius: 5px; padding: 7px 10px; font-size: 13px; overflow-wrap: anywhere; }
 .msg.err { background: var(--bad-bg); color: var(--bad); }
 .msg.warn { background: var(--warn-bg); color: var(--warn); }
@@ -157,8 +155,7 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
 
   <section class="editor" aria-label="Script">
     <div class="code">
-      <div id="gutter" aria-hidden="true"></div>
-      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="EisenScript"></textarea>
+      <div id="editor"></div>
     </div>
     <div id="errors" class="msg err" role="alert" hidden></div>
     <div id="warnings" class="msg warn" hidden></div>
@@ -185,6 +182,10 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
           <tr><td>set colorpool list:a,b</td><td>Also: randomhue, randomrgb, greyscale, and image:name.jpg, which samples the picture you choose with Color image.</td></tr>
           <tr><td>set raytracer::samples 16</td><td>Also: shadows, phong, dof, ambient-occlusion-samples, shiny::reflection.</td></tr>
           <tr><td>Cmd/Ctrl + Enter</td><td>Build now. Scripts also build as you type.</td></tr>
+          <tr><td>Ctrl + Space</td><td>Suggest rules, shapes, transforms, settings and colors.</td></tr>
+          <tr><td>Cmd/Ctrl + F</td><td>Find and replace.</td></tr>
+          <tr><td>Cmd/Ctrl + /</td><td>Turn lines into comments, or back.</td></tr>
+          <tr><td>Cmd/Ctrl + Z</td><td>Undo. Loading an example can be undone too.</td></tr>
         </table>
         <p class="credit">An independent browser remake, not affiliated with the original project. Structure Synth was created by Mikael Hvidtfeldt Christensen: <a href="https://structuresynth.sourceforge.net/" target="_blank" rel="noopener">structuresynth.sourceforge.net</a>. The scripts in the Structure Synth 1.5.0 group come from that project's download, which is licensed under LGPL 2.1 or GPL 3.</p>
       </div>
@@ -221,6 +222,9 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="engine.js"></script>
+<script src="vendor/codemirror.js"></script>
+<script src="editor/eisenscript.js"></script>
 <script src="examples.js"></script>
 <script src="examples-original.js"></script>
 <script>
@@ -232,35 +236,19 @@ const store = {
 };
 
 // ---------- Editor ----------
-const src = $('src'), gutter = $('gutter');
-let errorLine = null;
-function drawGutter() {
-  const n = src.value.split('\n').length;
-  let html = '';
-  for (let i = 1; i <= n; i++) html += i === errorLine ? '<b class="err">' + i + '</b>' : '<b>' + i + '</b>';
-  gutter.innerHTML = html;
-  gutter.scrollTop = src.scrollTop;
-}
-src.addEventListener('scroll', () => { gutter.scrollTop = src.scrollTop; });
-src.addEventListener('keydown', e => {
-  if (e.key === 'Tab' && !e.shiftKey) {
-    e.preventDefault();
-    src.setRangeText('  ', src.selectionStart, src.selectionEnd, 'end');
-    onEdit();
-  } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
+let editTimer = 0;
+const editor = createEisenEditor($('editor'), {
+  onChange() {
+    exSel.value = 'custom';
+    store.set('eisen-draft', editor.getText());
+    clearTimeout(editTimer);
+    editTimer = setTimeout(build, 350);
+  },
+  onRun() {
     clearTimeout(editTimer);
     build();
-  }
+  },
 });
-let editTimer = 0;
-function onEdit() {
-  drawGutter();
-  store.set('eisen-draft', src.value);
-  clearTimeout(editTimer);
-  editTimer = setTimeout(build, 350);
-}
-src.addEventListener('input', onEdit);
 
 const exSel = $('example');
 const exGroups = new Map();
@@ -281,10 +269,8 @@ const custom = document.createElement('option');
 custom.value = 'custom'; custom.textContent = 'My script'; custom.hidden = true;
 exSel.appendChild(custom);
 function loadScript(text, fit) {
-  src.value = text;
-  src.scrollTop = 0;
-  errorLine = null;
-  drawGutter();
+  editor.setText(text);
+  editor.clearError();
   store.set('eisen-draft', text);
   pendingFit = fit;
   build();
@@ -294,7 +280,6 @@ exSel.addEventListener('change', () => {
   $('seed').value = 1;
   loadScript(EISEN_EXAMPLES[+exSel.value].src, true);
 });
-src.addEventListener('input', () => { exSel.value = 'custom'; });
 $('open').addEventListener('click', () => $('file').click());
 $('file').addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -570,20 +555,18 @@ function build() {
   buildWorker.onerror = e => {
     if (id === buildId) showError({ message: 'The build stopped unexpectedly. The script may need too much memory. Lower its recursion depth and try again.', line: null });
   };
-  buildWorker.postMessage({ id, src: src.value, seed: parseInt($('seed').value, 10) || 0, colorImage });
+  buildWorker.postMessage({ id, src: editor.getText(), seed: parseInt($('seed').value, 10) || 0, colorImage });
 }
 
 function showError(m) {
-  errorLine = m.line;
-  drawGutter();
+  editor.setError(m.line, m.message);
   $('errors').textContent = (m.line ? 'Line ' + m.line + ': ' : '') + m.message;
   $('errors').hidden = false;
   status('Showing the last working build');
 }
 
 function showResult(r) {
-  errorLine = null;
-  drawGutter();
+  editor.clearError();
   $('errors').hidden = true;
   lastResult = r;
   if (r.seedFromScript) $('seed').value = r.seed;
@@ -790,12 +773,12 @@ $('saveTxt').addEventListener('click', () => {
   status('Saving script...');
   let settled = false;
   // If no save result arrives, the copy panel still gives a visible way out.
-  const timer = setTimeout(() => { if (!settled) showSaveText('no response from the viewer', src.value, 'script'); }, 8000);
-  trySave(STANDALONE ? 'structure-synth-script.es' : 'structure-synth-script.txt', new Blob([src.value], { type: 'text/plain' })).then(ok => {
+  const timer = setTimeout(() => { if (!settled) showSaveText('no response from the viewer', editor.getText(), 'script'); }, 8000);
+  trySave(STANDALONE ? 'structure-synth-script.es' : 'structure-synth-script.txt', new Blob([editor.getText()], { type: 'text/plain' })).then(ok => {
     settled = true;
     clearTimeout(timer);
     if (ok) $('saveBox').hidden = true;
-    else showSaveText(saveFailure, src.value, 'script');
+    else showSaveText(saveFailure, editor.getText(), 'script');
   });
 });
 

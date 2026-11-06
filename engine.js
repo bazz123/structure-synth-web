@@ -610,7 +610,7 @@ function build(src, opts) {
   };
 }
 
-const api = { parse, build, ScriptError };
+const api = { parse, build, ScriptError, colorNames: Object.keys(NAMED) };
 root.EisenEngine = api;
 
 if (typeof importScripts === 'function' && typeof self !== 'undefined' && typeof document === 'undefined') {
