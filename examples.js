@@ -1,6 +1,23 @@
 'use strict';
 // Example scripts written for this page.
 globalThis.EISEN_EXAMPLES = [
+  { name: 'Slider fan', src: `// Drag the sliders under the editor. Each one changes a #define value below.
+// (float:a-b) gives a slider from a to b. (int:a-b) allows whole numbers only.
+#define arms 7 (int:1-24)
+#define steps 60 (int:5-200)
+#define turn 9 (float:0-30)
+#define lift 0.12 (float:0-0.5)
+#define shrink 0.96 (float:0.85-0.995)
+
+set background #1b1f3a
+set maxdepth 400
+
+{ color #ff7a59 } arms * { ry 360/arms h 30 } arm
+
+rule arm md steps {
+  { s 1 0.3 0.6 } box
+  { x 0.9 y lift rz turn ry 4 s shrink h 2 } arm
+}` },
   { name: 'Windblown tree', src: `// A trunk that forks at random. Change the seed for a new tree.
 set background #dbe6ea
 set maxdepth 40

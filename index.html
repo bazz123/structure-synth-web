@@ -63,6 +63,14 @@ button.primary:hover:not(:disabled) { background: var(--accent); filter: brightn
 .code { flex: 1; min-height: 0; display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 #editor { flex: 1; min-width: 0; min-height: 0; }
 .code:focus-within { border-color: var(--accent); }
+.params { flex: none; max-height: 34vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px 10px; }
+.params-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 13px; }
+.params-head button { height: 26px; font-size: 12px; padding: 0 8px; }
+#paramList { display: grid; gap: 6px; margin-top: 4px; }
+.param { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr) 64px; align-items: center; gap: 10px; }
+.param label { font: 12.5px var(--code); color: var(--syn-number); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); }
+.param output { font: 12.5px var(--code); font-variant-numeric: tabular-nums; text-align: right; }
 .msg { border-radius: 5px; padding: 7px 10px; font-size: 13px; overflow-wrap: anywhere; }
 .msg.err { background: var(--bad-bg); color: var(--bad); }
 .msg.warn { background: var(--warn-bg); color: var(--warn); }
@@ -157,6 +165,13 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
     <div class="code">
       <div id="editor"></div>
     </div>
+    <section id="params" class="params" aria-label="Parameters" hidden>
+      <div class="params-head">
+        <span>Parameters</span>
+        <button id="paramsReset" type="button" title="Put every slider back to the value the script was loaded with">Reset</button>
+      </div>
+      <div id="paramList"></div>
+    </section>
     <div id="errors" class="msg err" role="alert" hidden></div>
     <div id="warnings" class="msg warn" hidden></div>
     <details>
@@ -178,6 +193,7 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
           <tr><td>box sphere cylinder grid line dot</td><td>Shapes. Add a class with <code>box::shiny</code>. Cylinders run along x.</td></tr>
           <tr><td>triangle[a;b;c]</td><td>A triangle from three x,y,z points.</td></tr>
           <tr><td>#define k 3</td><td>Replaces the word k with 3.</td></tr>
+          <tr><td>#define k 3 (float:0-10)</td><td>Adds a slider for k from 0 to 10. Use <code>int:</code> for whole numbers.</td></tr>
           <tr><td>set maxdepth 100</td><td>Also: maxobjects, minsize, maxsize, seed, background, colorpool, recursion, syncrandom.</td></tr>
           <tr><td>set colorpool list:a,b</td><td>Also: randomhue, randomrgb, greyscale, and image:name.jpg, which samples the picture you choose with Color image.</td></tr>
           <tr><td>set raytracer::samples 16</td><td>Also: shadows, phong, dof, ambient-occlusion-samples, shiny::reflection.</td></tr>
@@ -241,6 +257,7 @@ const editor = createEisenEditor($('editor'), {
   onChange() {
     exSel.value = 'custom';
     store.set('eisen-draft', editor.getText());
+    renderParams(false);
     clearTimeout(editTimer);
     editTimer = setTimeout(build, 350);
   },
@@ -248,6 +265,108 @@ const editor = createEisenEditor($('editor'), {
     clearTimeout(editTimer);
     build();
   },
+});
+
+// ---------- Sliders for `#define name value (float:lo-hi)` ----------
+// The script stays the source of truth: a slider rewrites the value in the
+// #define line, so saving, sharing and undo all keep working.
+const PARAM_RE = /^([ \t]*#define[ \t]+)(\S+)([ \t]+)(\S+)[ \t]*\(\s*(float|int)\s*:\s*(-?(?:\d+\.?\d*|\.\d+))\s*-\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/i;
+let params = [], paramShape = '', paramBaseline = new Map(), buildAgain = false;
+
+function findParams(text) {
+  const out = [];
+  let pos = 0;
+  for (const line of text.split('\n')) {
+    const m = line.match(PARAM_RE);
+    if (m) {
+      const lo = parseFloat(m[6]), hi = parseFloat(m[7]), value = parseFloat(m[4]);
+      const from = pos + m[1].length + m[2].length + m[3].length;
+      if (hi > lo) out.push({ name: m[2], kind: m[5].toLowerCase(), lo, hi, value: isFinite(value) ? value : lo, from, to: from + m[4].length });
+    }
+    pos += line.length + 1;
+  }
+  return out;
+}
+
+function paramStep(p) {
+  if (p.kind === 'int') return 1;
+  const raw = (p.hi - p.lo) / 200, unit = Math.pow(10, Math.floor(Math.log10(raw)));
+  return raw / unit >= 5 ? 5 * unit : raw / unit >= 2 ? 2 * unit : unit;
+}
+function paramText(p, v) {
+  if (p.kind === 'int') return String(Math.round(v));
+  const decimals = Math.max(0, -Math.floor(Math.log10(paramStep(p))));
+  return String(+v.toFixed(decimals));
+}
+
+// Rebuilds the slider rows when the set of parameters changes, and otherwise
+// only refreshes values, so a slider being dragged is never replaced.
+function renderParams(force) {
+  params = findParams(editor.getText());
+  const shape = params.map(p => p.name + ':' + p.kind + ':' + p.lo + ':' + p.hi).join('|');
+  const list = $('paramList');
+  $('params').hidden = !params.length;
+  if (shape === paramShape && !force) {
+    params.forEach((p, i) => {
+      const row = list.children[i];
+      if (!row || document.activeElement === row.range) return;
+      row.range.value = p.value;
+      row.output.textContent = paramText(p, p.value);
+    });
+    return;
+  }
+  paramShape = shape;
+  list.textContent = '';
+  params.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'param';
+    const label = document.createElement('label');
+    label.htmlFor = 'param-' + i;
+    label.textContent = p.name;
+    label.title = p.name + ' (' + p.kind + ' ' + p.lo + ' to ' + p.hi + ')';
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.id = 'param-' + i;
+    range.min = p.lo; range.max = p.hi; range.step = paramStep(p);
+    range.value = p.value;
+    const output = document.createElement('output');
+    output.htmlFor = range.id;
+    output.textContent = paramText(p, p.value);
+    range.addEventListener('input', () => setParam(i, parseFloat(range.value)));
+    row.range = range;
+    row.output = output;
+    row.append(label, range, output);
+    list.appendChild(row);
+  });
+}
+
+function setParam(i, v) {
+  const current = findParams(editor.getText())[i];
+  if (!current) return;
+  const text = paramText(current, v);
+  editor.replace(current.from, current.to, text);
+  const row = $('paramList').children[i];
+  if (row) row.output.textContent = text;
+  params = findParams(editor.getText());
+  exSel.value = 'custom';
+  store.set('eisen-draft', editor.getText());
+  clearTimeout(editTimer);
+  // Waits for a running build instead of cancelling it, so a heavy model
+  // still updates while a slider keeps moving.
+  if (buildWorker) buildAgain = true;
+  else build();
+}
+function buildAgainIfAsked() {
+  if (!buildAgain) return;
+  buildAgain = false;
+  build();
+}
+
+$('paramsReset').addEventListener('click', () => {
+  findParams(editor.getText()).forEach((p, i) => {
+    if (paramBaseline.has(p.name)) setParam(i, paramBaseline.get(p.name));
+  });
+  renderParams(false);
 });
 
 const exSel = $('example');
@@ -272,6 +391,8 @@ function loadScript(text, fit) {
   editor.setText(text);
   editor.clearError();
   store.set('eisen-draft', text);
+  renderParams(true);
+  paramBaseline = new Map(params.map(p => [p.name, p.value]));
   pendingFit = fit;
   build();
 }
@@ -549,11 +670,16 @@ function build() {
     if (m.progress !== undefined) { status('Building... ' + m.progress.toLocaleString('en-US') + ' objects'); return; }
     buildWorker.terminate();
     buildWorker = null;
-    if (!m.ok) { showError(m); return; }
-    showResult(m.result);
+    if (!m.ok) showError(m);
+    else showResult(m.result);
+    buildAgainIfAsked();
   };
   buildWorker.onerror = e => {
-    if (id === buildId) showError({ message: 'The build stopped unexpectedly. The script may need too much memory. Lower its recursion depth and try again.', line: null });
+    if (id !== buildId) return;
+    buildWorker.terminate();
+    buildWorker = null;
+    showError({ message: 'The build stopped unexpectedly. The script may need too much memory. Lower its recursion depth and try again.', line: null });
+    buildAgainIfAsked();
   };
   buildWorker.postMessage({ id, src: editor.getText(), seed: parseInt($('seed').value, 10) || 0, colorImage });
 }

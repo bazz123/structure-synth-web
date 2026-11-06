@@ -61,6 +61,7 @@ const eisenScript = CM.StreamLanguage.define({
     }
     if (stream.match('}')) { st.braces.pop(); return 'brace'; }
     if (stream.match(/^[*>]/)) return 'operator';
+    if (stream.match(/^\(\s*(float|int)\s*:[^)]*\)/i)) return 'meta';
     if (stream.match(NUMBER)) return 'number';
     const word = stream.match(/^[A-Za-z_][\w:.\-]*/);
     if (!word) { stream.next(); return null; }
@@ -229,6 +230,13 @@ globalThis.createEisenEditor = function (parent, { onChange, onRun }) {
       view.dispatch(CM.setDiagnostics(view.state, [{ from, to, severity: 'error', message }]));
     },
     clearError() { view.dispatch(CM.setDiagnostics(view.state, [])); },
+    // Changes part of the script for a slider. It can be undone, but doesn't
+    // count as typing, so it doesn't schedule the usual delayed build.
+    replace(from, to, text) {
+      quiet = true;
+      view.dispatch({ changes: { from, to, insert: text }, userEvent: 'input.slider' });
+      quiet = false;
+    },
     focus() { view.focus(); },
   };
 };
