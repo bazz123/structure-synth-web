@@ -158,7 +158,13 @@ function buildScene(msg) {
   const fw = norm(sub(cam.target, cam.pos));
   const right = norm(cross(fw, cam.up));
   const up = cross(right, fw);
-  const lightDir = norm([right[0] * 0.45 + up[0] * 0.8 - fw[0] * 0.55, right[1] * 0.45 + up[1] * 0.8 - fw[1] * 0.55, right[2] * 0.45 + up[2] * 0.8 - fw[2] * 0.55]);
+  // The light sits at an angle and height relative to the camera, so the side
+  // facing the viewer is always lit. The live view and GPU renderer use the same.
+  const light = msg.light || {};
+  const az = (light.azimuth === undefined ? 39 : light.azimuth) * Math.PI / 180;
+  const el = (light.elevation === undefined ? 48 : light.elevation) * Math.PI / 180;
+  const lr = Math.sin(az) * Math.cos(el), lu = Math.sin(el), lb = Math.cos(az) * Math.cos(el);
+  const lightDir = norm([right[0] * lr + up[0] * lu - fw[0] * lb, right[1] * lr + up[1] * lu - fw[1] * lb, right[2] * lr + up[2] * lu - fw[2] * lb]);
   const phongBase = vecSetting(rt.phong, 3) || [0.6, 0.6, 0.2];
   const materials = msg.classes.map(c => {
     const p = c ? c + '::' : '';
@@ -173,7 +179,10 @@ function buildScene(msg) {
 
   S = {
     type, inv, tri, color, cls, order, nb6, left, count, n,
-    materials, lightDir, diag,
+    materials, lightDir, diag, nodeCount: nodes,
+    lightScale: light.intensity === undefined ? 1 : light.intensity,
+    ambientScale: light.ambient === undefined ? 1 : light.ambient,
+    transparent: !!msg.transparent,
     shadows: String(rt.shadows === undefined ? 'true' : rt.shadows).toLowerCase() !== 'false',
     aoSamples: Math.max(0, Math.round(Number(rt['ambient-occlusion-samples'] === undefined ? 1 : rt['ambient-occlusion-samples']) || 0)),
     samples: msg.samples, bg: msg.background, cam, fw, right, up, tanH,
@@ -335,10 +344,12 @@ function rand() {
   return (x >>> 0) / 4294967296;
 }
 
-let outR = 0, outG = 0, outB = 0;
+let outR = 0, outG = 0, outB = 0, primaryMiss = false;
 
 function shade(ox, oy, oz, dx, dy, dz, depth) {
   if (!trace(ox, oy, oz, dx, dy, dz, Infinity, false)) {
+    if (depth === 0) primaryMiss = true;
+    if (depth === 0 && S.transparent) { outR = 0; outG = 0; outB = 0; return; }
     outR = S.bg[0]; outG = S.bg[1]; outB = S.bg[2];
     return;
   }
@@ -348,7 +359,7 @@ function shade(ox, oy, oz, dx, dy, dz, depth) {
   const qx = px + nx * bias, qy = py + ny * bias, qz = pz + nz * bias;
   const cr = S.color[p * 4], cg = S.color[p * 4 + 1], cb = S.color[p * 4 + 2], alpha = S.color[p * 4 + 3];
   const mat = S.materials[S.cls[p]] || S.materials[0];
-  const [amb, dif, spe] = mat.phong;
+  const amb = mat.phong[0] * S.ambientScale, dif = mat.phong[1] * S.lightScale, spe = mat.phong[2] * S.lightScale;
 
   let vis = 1;
   if (S.aoSamples > 0 && amb > 0) {
@@ -400,7 +411,7 @@ function renderTile(x0, y0, w, h) {
     for (let x = 0; x < w; x++) {
       seedState = (((x0 + x) * 73856093) ^ ((y0 + y) * 19349663) ^ 0x2F6E2B1) | 1;
       for (let i = 0; i < 4; i++) rand();
-      let r = 0, g = 0, b = 0;
+      let r = 0, g = 0, b = 0, covered = 0;
       for (let s = 0; s < samples; s++) {
         const jx = samples > 1 ? rand() : 0.5, jy = samples > 1 ? rand() : 0.5;
         const u = ((x0 + x + jx) / width * 2 - 1) * tanH * aspect;
@@ -415,19 +426,65 @@ function renderTile(x0, y0, w, h) {
           dx = fx - ox; dy = fy - oy; dz = fz - oz;
         }
         const l = Math.hypot(dx, dy, dz);
+        primaryMiss = false;
         shade(ox, oy, oz, dx / l, dy / l, dz / l, 0);
         r += outR; g += outG; b += outB;
+        if (!primaryMiss) covered++;
       }
       const o = (y * w + x) * 4;
-      out[o] = r / samples * 255; out[o + 1] = g / samples * 255; out[o + 2] = b / samples * 255; out[o + 3] = 255;
+      if (S.transparent) {
+        // Straight alpha for PNG: color averaged over the samples that hit something.
+        const k = covered ? 255 / covered : 0;
+        out[o] = r * k; out[o + 1] = g * k; out[o + 2] = b * k; out[o + 3] = covered / samples * 255;
+      } else {
+        out[o] = r / samples * 255; out[o + 1] = g / samples * 255; out[o + 2] = b / samples * 255; out[o + 3] = 255;
+      }
     }
   }
   return out;
 }
 
+// Lays the scene out for the GPU renderer: primitives in BVH order, so a leaf
+// covers a contiguous range, with 5 vec4s each, and nodes as 2 vec4s each.
+function packForGpu() {
+  const { n, order, type, inv, tri, color, cls, nb6, left, count, nodeCount, materials } = S;
+  const prims = new Float32Array(Math.max(1, n) * 20);
+  for (let i = 0; i < n; i++) {
+    const p = order[i], o = i * 20;
+    if (type[p] === 2) {
+      const q = p * 9;
+      prims[o] = tri[q]; prims[o + 1] = tri[q + 1]; prims[o + 2] = tri[q + 2];
+      for (let k = 0; k < 3; k++) {
+        prims[o + 4 + k] = tri[q + 3 + k] - tri[q + k];
+        prims[o + 8 + k] = tri[q + 6 + k] - tri[q + k];
+      }
+    } else {
+      for (let k = 0; k < 12; k++) prims[o + k] = inv[p * 12 + k];
+    }
+    for (let k = 0; k < 4; k++) prims[o + 12 + k] = color[p * 4 + k];
+    prims[o + 16] = type[p];
+    prims[o + 17] = cls[p];
+  }
+  const nodes = new Float32Array(Math.max(1, nodeCount) * 8), bits = new Uint32Array(nodes.buffer);
+  for (let i = 0; i < nodeCount; i++) {
+    for (let k = 0; k < 3; k++) { nodes[i * 8 + k] = nb6[i * 6 + k]; nodes[i * 8 + 4 + k] = nb6[i * 6 + 3 + k]; }
+    bits[i * 8 + 3] = left[i];
+    bits[i * 8 + 7] = count[i];
+  }
+  const mats = new Float32Array(Math.max(1, materials.length) * 4);
+  materials.forEach((m, i) => { mats[i * 4] = m.phong[0]; mats[i * 4 + 1] = m.phong[1]; mats[i * 4 + 2] = m.phong[2]; mats[i * 4 + 3] = m.refl; });
+  return { prims, nodes, materials: mats, primCount: n, nodeCount, lightDir: S.lightDir, diag: S.diag, shadows: S.shadows };
+}
+
 self.onmessage = e => {
   const m = e.data;
   if (m.type === 'scene') { buildScene(m); self.postMessage({ type: 'ready' }); return; }
+  if (m.type === 'pack') {
+    buildScene(m);
+    const p = packForGpu();
+    self.postMessage({ type: 'packed', packed: p }, [p.prims.buffer, p.nodes.buffer, p.materials.buffer]);
+    return;
+  }
   if (m.type === 'tile') {
     const px = renderTile(m.x, m.y, m.w, m.h);
     self.postMessage({ type: 'tile', x: m.x, y: m.y, w: m.w, h: m.h, px }, [px.buffer]);
