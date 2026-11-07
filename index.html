@@ -89,6 +89,30 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
 #gl { touch-action: none; cursor: grab; }
 #gl:active { cursor: grabbing; }
 #shot { pointer-events: none; }
+#gpuView { pointer-events: none; }
+.settings {
+  position: absolute; top: 8px; right: 8px; bottom: 8px; z-index: 3; width: min(320px, calc(100% - 16px)); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px 12px;
+  display: flex; flex-direction: column; gap: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.settings-head button, .settings .btnrow button { height: 26px; font-size: 12px; padding: 0 8px; }
+.settings fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 8px 0 0; display: grid; gap: 7px; min-width: 0; }
+.settings legend { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 0 6px 0 0; }
+.srow { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 13px; }
+.srow > select, .srow > .pair { grid-column: 2 / 4; min-width: 0; }
+.srow > input[type=number] { grid-column: 2 / 4; width: 100%; }
+.srow input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); }
+.srow output { font: 12px var(--code); font-variant-numeric: tabular-nums; text-align: right; }
+.settings select, .settings input[type=number] { height: 28px; font-size: 12.5px; }
+.pair { display: flex; align-items: center; gap: 6px; }
+.pair input { width: 0; flex: 1; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.check input { accent-color: var(--accent); margin: 0; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.note { margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.exportbar { height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+#exportBar { height: 100%; width: 0; background: var(--accent); }
 #nogl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
 .hint {
   position: absolute; left: 10px; top: 10px; font-size: 12px; padding: 3px 8px; border-radius: 4px;
@@ -99,7 +123,7 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
   font: 12px/1.4 var(--code); font-variant-numeric: tabular-nums; color: var(--muted);
 }
 .readout b { color: var(--fg); font-weight: 400; }
-#status { margin-left: auto; color: var(--fg); }
+#status { margin-left: auto; color: var(--fg); flex: 1 1 0; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .progress { height: 3px; background: var(--accent); width: 0; flex: none; }
 #saveBox {
   position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px; padding: 12px;
@@ -146,11 +170,13 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
       <div class="group">
         <label class="lab" for="quality">Quality</label>
         <select id="quality">
-          <option value="draft">Draft</option>
+          <option value="preview">Preview</option>
           <option value="standard" selected>Standard</option>
           <option value="high">High</option>
+          <option value="ultra">Ultra</option>
         </select>
         <button id="render" class="primary" type="button">Raytrace</button>
+        <button id="renderSettings" type="button" aria-expanded="false" aria-controls="settingsPanel">Render settings</button>
       </div>
       <div class="group">
         <button id="fit" type="button">Fit view</button>
@@ -212,6 +238,71 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
     <div class="view" id="view">
       <canvas id="gl"></canvas>
       <canvas id="shot" hidden></canvas>
+      <canvas id="gpuView" hidden></canvas>
+      <aside id="settingsPanel" class="settings" aria-label="Render settings" hidden>
+        <div class="settings-head">
+          <strong>Render settings</strong>
+          <button id="settingsClose" type="button">Close</button>
+        </div>
+        <fieldset>
+          <legend>Viewport</legend>
+          <label class="check"><input id="vpShadows" type="checkbox"> Soft shadows</label>
+          <div class="srow"><label for="vpShadowStrength">Shadow strength</label><input id="vpShadowStrength" type="range" min="0" max="1" step="0.05"><output id="vpShadowStrengthOut"></output></div>
+          <label class="check"><input id="vpAo" type="checkbox"> Ambient occlusion</label>
+          <div class="srow"><label for="vpAoStrength">Occlusion strength</label><input id="vpAoStrength" type="range" min="0" max="1" step="0.05"><output id="vpAoStrengthOut"></output></div>
+          <p class="note">Shadows and occlusion are for the live view. Raytraced images compute their own.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Light</legend>
+          <div class="srow"><label for="vpLight">Light</label><input id="vpLight" type="range" min="0" max="2" step="0.05"><output id="vpLightOut"></output></div>
+          <div class="srow"><label for="vpAmbient">Ambient</label><input id="vpAmbient" type="range" min="0" max="2" step="0.05"><output id="vpAmbientOut"></output></div>
+          <div class="srow"><label for="vpAzimuth">Angle</label><input id="vpAzimuth" type="range" min="-180" max="180" step="1"><output id="vpAzimuthOut"></output></div>
+          <div class="srow"><label for="vpElevation">Height</label><input id="vpElevation" type="range" min="0" max="90" step="1"><output id="vpElevationOut"></output></div>
+          <p class="note">The light keeps this angle to the camera, in the live view and in raytraced images.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Path tracing</legend>
+          <div class="srow"><label for="ptEngine">Engine</label>
+            <select id="ptEngine">
+              <option value="auto">Auto (GPU if available)</option>
+              <option value="gpu">GPU (WebGPU)</option>
+              <option value="cpu">CPU</option>
+            </select>
+          </div>
+          <div class="srow"><label for="ptSamples">Samples per pixel</label><input id="ptSamples" type="number" min="1" step="1"></div>
+          <div class="srow"><label for="ptBounces">Bounces (GPU)</label><input id="ptBounces" type="number" min="1" max="16" step="1"></div>
+          <p class="note">Leave a field empty to use the Quality preset. The GPU traces light bouncing between surfaces; the CPU uses one bounce.</p>
+          <p class="note" id="gpuInfo"></p>
+        </fieldset>
+        <fieldset>
+          <legend>Export image</legend>
+          <div class="srow"><label for="exportSize">Size</label><select id="exportSize"></select></div>
+          <div class="srow"><label for="exportW">Width × height</label>
+            <span class="pair"><input id="exportW" type="number" min="1" max="16384" step="1" aria-label="Width in pixels"><span>×</span><input id="exportH" type="number" min="1" max="16384" step="1" aria-label="Height in pixels"></span>
+          </div>
+          <div class="btnrow">
+            <button id="exportLandscape" type="button">Landscape</button>
+            <button id="exportPortrait" type="button">Portrait</button>
+            <button id="exportSquare" type="button">Square</button>
+          </div>
+          <label class="check"><input id="exportLock" type="checkbox"> Lock aspect ratio</label>
+          <label class="check"><input id="exportTransparent" type="checkbox"> Transparent background</label>
+          <div class="srow"><label for="exportSource">Render with</label>
+            <select id="exportSource">
+              <option value="path">Path tracer</option>
+              <option value="viewport">Viewport (instant)</option>
+            </select>
+          </div>
+          <p class="note" id="exportMemory"></p>
+          <button id="exportRun" class="primary" type="button">Export PNG</button>
+          <div class="exportbar"><div id="exportBar"></div></div>
+          <p class="note" id="exportStatus" aria-live="polite"></p>
+        </fieldset>
+        <fieldset>
+          <legend>Last render</legend>
+          <p class="note" id="perfInfo">Nothing rendered yet.</p>
+        </fieldset>
+      </aside>
       <div id="nogl" hidden>This browser can't start WebGL, so the live 3D view is off. Raytrace still works.</div>
       <div class="hint" id="hint">Drag to orbit. Scroll or pinch to zoom.</div>
       <div id="saveBox" hidden>
@@ -238,6 +329,17 @@ summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/SAOShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/DepthLimitedBlurShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/UnpackDepthRGBAShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/SAOPass.js"></script>
+<script src="render/viewport.js"></script>
+<script src="render/gpu-pathtracer.js"></script>
+<script src="render/render-controller.js"></script>
 <script src="engine.js"></script>
 <script src="vendor/codemirror.js"></script>
 <script src="editor/eisenscript.js"></script>
@@ -451,21 +553,19 @@ $('reseed').addEventListener('click', () => { $('seed').value = Math.floor(Math.
 
 // ---------- Live view ----------
 const view = $('view'), glCanvas = $('gl'), shot = $('shot');
-let renderer = null, scene = null, camera = null, controls = null, group = null, light = null;
+let renderer = null, scene = null, camera = null, controls = null, group = null;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
+  // alpha lets image export make the background transparent.
+  renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.62));
-  light = new THREE.DirectionalLight(0xffffff, 0.62);
-  camera.add(light);
-  light.position.set(0.6, 1, 0.7);
   scene.add(camera);
   group = new THREE.Group();
   scene.add(group);
   controls = new THREE.OrbitControls(camera, glCanvas);
-  controls.addEventListener('change', () => { hideShot(); draw(); });
+  controls.addEventListener('change', () => { onCameraChange(); draw(); });
+  attachViewport(renderer, scene, camera, controls);
 } catch (e) {
   renderer = null;
   camera = null;
@@ -475,16 +575,23 @@ try {
 // Keeps the camera for the raytracer when WebGL is off.
 const fallbackCam = { pos: [0, 0, 20], target: [0, 0, 0], up: [0, 1, 0], fov: 50 };
 
-function draw() { if (renderer) renderer.render(scene, camera); }
+// The GPU view covers the live render, so it skips drawing underneath.
+function draw() {
+  if (!renderer || renderOverlayActive()) return;
+  if (viewportFx) viewportFx.render();
+  else renderer.render(scene, camera);
+}
 function resize() {
   const w = view.clientWidth, h = view.clientHeight;
   if (!w || !h) return;
   if (renderer) {
     renderer.setSize(w, h, false);
+    if (viewportFx) viewportFx.setSize(w, h, renderer.getPixelRatio());
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     draw();
   }
+  onViewResize();
 }
 new ResizeObserver(resize).observe(view);
 
@@ -524,6 +631,8 @@ function instanced(data, geom) {
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
     mesh.frustumCulled = false;
+    mesh.castShadow = wantSolid;
+    mesh.receiveShadow = true;
     group.add(mesh);
   };
   add(solid, true);
@@ -562,6 +671,8 @@ function buildMeshes(r) {
     if (!solid) { mat.transparent = true; mat.opacity = alpha / nTri; mat.depthWrite = false; }
     const mesh = new THREE.Mesh(g, mat);
     mesh.frustumCulled = false;
+    mesh.castShadow = solid;
+    mesh.receiveShadow = true;
     group.add(mesh);
   }
 
@@ -655,11 +766,10 @@ $('fit').addEventListener('click', () => { hideShot(); fitView(); });
 
 // ---------- Build ----------
 let buildWorker = null, buildId = 0, lastResult = null, pendingFit = true;
-const status = t => { $('status').textContent = t; };
+const status = t => { $('status').textContent = t; $('status').title = t; };
 
 function build() {
-  stopRender();
-  hideShot();
+  beforeBuild();
   if (buildWorker) buildWorker.terminate();
   const id = ++buildId;
   buildWorker = new Worker('engine.js');
@@ -710,87 +820,12 @@ function showResult(r) {
     scene.background = new THREE.Color(bg[0], bg[1], bg[2]);
     buildMeshes(r);
   }
+  onSceneBuilt(r);
   if (pendingFit) { fitView(); pendingFit = false; }
   else setClipping(r);
   resize();
 }
 
-// ---------- Raytrace ----------
-let rt = null;
-function hideShot() { shot.hidden = true; if (renderer) $('hint').hidden = false; }
-function stopRender() {
-  if (!rt) return;
-  rt.workers.forEach(w => w.terminate());
-  rt = null;
-  $('render').textContent = 'Raytrace';
-  $('bar').style.width = '0';
-}
-function currentCamera() {
-  if (!renderer) return fallbackCam;
-  const p = camera.position, t = controls.target, u = camera.up;
-  return { pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z], up: [u.x, u.y, u.z], fov: camera.fov };
-}
-function startRender() {
-  if (rt) { stopRender(); status('Raytrace stopped'); return; }
-  if (!lastResult) return;
-  const r = lastResult, set = r.settings.raytracer;
-  const scriptSamples = parseInt(set.samples, 10);
-  const q = $('quality').value;
-  // A script's samples value N means N x N per pixel.
-  const samples = q === 'draft' ? 4 : q === 'high' ? 64 : scriptSamples > 0 ? Math.min(64, scriptSamples * scriptSamples) : 16;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.max(1, Math.round(view.clientWidth * dpr)), height = Math.max(1, Math.round(view.clientHeight * dpr));
-  shot.width = width; shot.height = height;
-  const ctx = shot.getContext('2d');
-  if (renderer) { draw(); ctx.drawImage(glCanvas, 0, 0, width, height); }
-  shot.hidden = false;
-  $('hint').hidden = true;
-
-  const size = 48, tiles = [];
-  for (let y = 0; y < height; y += size) for (let x = 0; x < width; x += size) {
-    tiles.push({ x, y, w: Math.min(size, width - x), h: Math.min(size, height - y) });
-  }
-  const cx = width / 2, cy = height / 2;
-  tiles.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
-  tiles.reverse();
-
-  const count = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
-  const total = tiles.length, t0 = performance.now();
-  let done = 0;
-  const job = { workers: [] };
-  rt = job;
-  $('render').textContent = 'Stop';
-  status('Raytracing...');
-  const scene_ = {
-    type: 'scene', boxes: r.boxes, spheres: r.spheres, cylinders: r.cylinders, grids: r.grids, lines: r.lines, dots: r.dots, tris: r.tris, classes: r.classes, bounds: r.bounds,
-    raytracer: set, background: r.settings.background, camera: currentCamera(), samples, width, height,
-  };
-  for (let i = 0; i < count; i++) {
-    const w = new Worker('raytrace.js');
-    job.workers.push(w);
-    const giveTile = () => { const t = tiles.pop(); if (t) w.postMessage(Object.assign({ type: 'tile' }, t)); };
-    w.onmessage = e => {
-      if (rt !== job) return;
-      const m = e.data;
-      if (m.type === 'ready') { giveTile(); return; }
-      ctx.putImageData(new ImageData(m.px, m.w, m.h), m.x, m.y);
-      done++;
-      $('bar').style.width = (done / total * 100) + '%';
-      if (done === total) {
-        const secs = ((performance.now() - t0) / 1000).toFixed(1);
-        stopRender();
-        status('Raytraced ' + width + ' x ' + height + ' at ' + samples + ' samples in ' + secs + ' s. Drag to return to the live view.');
-      } else giveTile();
-    };
-    w.onerror = () => {
-      if (rt !== job) return;
-      stopRender();
-      status('Raytrace stopped because of an error. Try a smaller model.');
-    };
-    w.postMessage(scene_);
-  }
-}
-$('render').addEventListener('click', startRender);
 
 // ---------- Saving ----------
 // Outside a viewer's frame, such as on GitHub Pages, browser downloads work.
@@ -886,13 +921,12 @@ $('saveCopy').addEventListener('click', () => {
   navigator.clipboard.writeText(box.value).then(() => { $('saveCopy').textContent = 'Copied'; }, manual);
 });
 
-$('savePng').addEventListener('click', () => {
-  const useShot = !shot.hidden;
-  if (!useShot) draw();
-  (useShot ? shot : glCanvas).toBlob(async b => {
-    if (!b) { status('The image could not be created. Try Raytrace, then save again.'); return; }
-    if (!await trySave('structure-synth.png', b)) showSaveImage(b);
-  }, 'image/png');
+// Saves what the view shows: the GPU or CPU render, or the live view. For a
+// chosen size, use Export image in Render settings.
+$('savePng').addEventListener('click', async () => {
+  const b = await captureCurrentImage();
+  if (!b) { status('The image could not be created. Try Raytrace, then save again.'); return; }
+  if (!await trySave('structure-synth.png', b)) showSaveImage(b);
 });
 
 $('saveTxt').addEventListener('click', () => {
@@ -942,6 +976,7 @@ $('saveObj').addEventListener('click', () => {
 });
 
 // ---------- Start ----------
+initRenderSettings();
 const draft = store.get('eisen-draft');
 const isExample = draft !== null && EISEN_EXAMPLES.some(ex => ex.src === draft);
 if (draft !== null && draft.trim() && !isExample) {
